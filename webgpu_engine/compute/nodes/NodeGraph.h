@@ -79,9 +79,16 @@ public:
     const TileStorageTexture& output_overlay_texture_storage() const;
     TileStorageTexture& output_overlay_texture_storage();
 
-private:
+public:
     // finds topological order of nodes and connects run_finished and run slots accordingly
     void connect_node_signals_and_slots();
+
+    // Returns the topological ordering of nodes (call after connect_node_signals_and_slots)
+    [[nodiscard]] const std::vector<Node*>& get_topological_ordering() const { return m_topological_ordering; }
+
+    // Synchronous execution - directly calls nodes without Qt signals
+    // Use this in environments where Qt signals don't work (e.g., Emscripten)
+    void run_sync();
 
 public slots:
     void run();
@@ -108,6 +115,7 @@ public:
 private:
     std::string m_name;
     std::unordered_map<std::string, std::unique_ptr<Node>> m_nodes;
+    std::vector<Node*> m_topological_ordering;
 
     GpuHashMap<radix::tile::Id, uint32_t, GpuTileId>* m_output_normals_hash_map_ptr;
     TileStorageTexture* m_output_normals_texture_storage_ptr;

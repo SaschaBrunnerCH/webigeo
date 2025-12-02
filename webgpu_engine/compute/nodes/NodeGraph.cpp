@@ -149,14 +149,20 @@ void NodeGraph::connect_node_signals_and_slots()
         }
     }
 
-    connect(this, &NodeGraph::run_triggered, topological_ordering.front(), &Node::run);
+    // Store topological ordering for run_sync()
+    m_topological_ordering = topological_ordering;
+
+    // Use DirectConnection to ensure signals are delivered synchronously
+    // This is necessary for Emscripten where there's no Qt event loop running
+    // NOTE: Qt signals may not work in Emscripten - use run_sync() instead
+    connect(this, &NodeGraph::run_triggered, topological_ordering.front(), &Node::run, Qt::DirectConnection);
     for (uint32_t i = 0; i < topological_ordering.size() - 1; i++) {
-        connect(topological_ordering[i], &Node::run_completed, topological_ordering[i + 1], &Node::run);
+        connect(topological_ordering[i], &Node::run_completed, topological_ordering[i + 1], &Node::run, Qt::DirectConnection);
     }
-    connect(topological_ordering.back(), &Node::run_completed, this, &NodeGraph::run_completed); // emits run completed signal in NodeGraph
+    connect(topological_ordering.back(), &Node::run_completed, this, &NodeGraph::run_completed, Qt::DirectConnection); // emits run completed signal in NodeGraph
 
     for (auto& [_, node] : m_nodes) {
-        connect(node.get(), &Node::run_failed, this, &NodeGraph::emit_graph_failure);
+        connect(node.get(), &Node::run_failed, this, &NodeGraph::emit_graph_failure, Qt::DirectConnection);
     }
 }
 
@@ -164,6 +170,26 @@ void NodeGraph::run()
 {
     qDebug() << "running node graph ...";
     emit run_triggered();
+}
+
+void NodeGraph::run_sync()
+{
+    qDebug() << "running node graph synchronously...";
+    qDebug() << "  number of nodes:" << m_topological_ordering.size();
+
+    if (m_topological_ordering.empty()) {
+        qWarning() << "Topological ordering is empty. Did you call connect_node_signals_and_slots()?";
+        return;
+    }
+
+    // Execute nodes in topological order by directly calling run()
+    // This bypasses Qt signals which don't work reliably in Emscripten
+    for (Node* node : m_topological_ordering) {
+        node->run();
+    }
+
+    qDebug() << "node graph execution complete";
+    // Note: We don't emit run_completed() here because the caller will handle completion
 }
 
 void NodeGraph::emit_graph_failure(NodeRunFailureInfo info)
