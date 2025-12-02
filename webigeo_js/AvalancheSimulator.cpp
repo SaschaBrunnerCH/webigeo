@@ -178,6 +178,13 @@ void AvalancheSimulator::start_run()
 
     EM_ASM({ console.log('[C++] node_graph->run_sync() returned'); });
 
+    // Try to complete texture readback (uses emscripten_sleep to poll for buffer mapping)
+    if (m_texture_readback_node && m_texture_readback_node->is_readback_pending()) {
+        EM_ASM({ console.log('[C++] Attempting texture readback...'); });
+        bool readback_success = m_texture_readback_node->try_complete_readback();
+        EM_ASM({ console.log('[C++] Texture readback result:', $0); }, readback_success ? 1 : 0);
+    }
+
     // Since run_sync() completes synchronously, call on_run_completed directly
     on_run_completed();
 }
@@ -197,6 +204,53 @@ void AvalancheSimulator::process_events()
     if (s_process_events_count % 60 == 0) {
         EM_ASM({ console.log('[C++] process_events called', $0, 'times'); }, s_process_events_count);
     }
+}
+
+emscripten::val AvalancheSimulator::get_readback_buffer_info()
+{
+    emscripten::val info = emscripten::val::object();
+
+    if (!m_texture_readback_node || !m_texture_readback_node->is_readback_pending()) {
+        info.set("valid", false);
+        return info;
+    }
+
+    WGPUBuffer buffer = m_texture_readback_node->get_staging_buffer();
+    if (!buffer) {
+        info.set("valid", false);
+        return info;
+    }
+
+    info.set("valid", true);
+    // Pass the buffer handle as a pointer value that JavaScript can use with emscripten's WebGPU
+    info.set("bufferPtr", reinterpret_cast<uintptr_t>(buffer));
+    info.set("bufferSize", static_cast<double>(m_texture_readback_node->get_buffer_size()));
+    info.set("width", m_texture_readback_node->get_width());
+    info.set("height", m_texture_readback_node->get_height());
+    info.set("paddedBytesPerRow", m_texture_readback_node->get_padded_bytes_per_row());
+    info.set("unpaddedBytesPerRow", m_texture_readback_node->get_unpadded_bytes_per_row());
+
+    EM_ASM({ console.log('[C++] get_readback_buffer_info: buffer=' + $0 + ', size=' + $1 + ', dims=' + $2 + 'x' + $3); },
+           reinterpret_cast<uintptr_t>(buffer),
+           m_texture_readback_node->get_buffer_size(),
+           m_texture_readback_node->get_width(),
+           m_texture_readback_node->get_height());
+
+    return info;
+}
+
+void AvalancheSimulator::set_readback_data(emscripten::val data)
+{
+    if (!m_texture_readback_node) {
+        EM_ASM({ console.error('[C++] set_readback_data: no readback node'); });
+        return;
+    }
+
+    // Convert JavaScript Uint8Array to std::vector
+    std::vector<uint8_t> vec = emscripten::vecFromJSArray<uint8_t>(data);
+    EM_ASM({ console.log('[C++] set_readback_data: received ' + $0 + ' bytes'); }, vec.size());
+
+    m_texture_readback_node->set_readback_data(std::move(vec));
 }
 
 void AvalancheSimulator::on_run_completed()
@@ -297,14 +351,17 @@ std::unique_ptr<NodeGraph> AvalancheSimulator::create_js_compute_graph()
     buffer_to_texture_node->input_socket("raster dimensions").connect(trajectories_ptr->output_socket("raster dimensions"));
     buffer_to_texture_node->input_socket("storage buffer").connect(trajectories_ptr->output_socket("layer1_zdelta"));
     buffer_to_texture_node->input_socket("transparency buffer").connect(trajectories_ptr->output_socket("layer2_cellCounts"));
+    BufferToTextureNode* buffer_to_texture_ptr = buffer_to_texture_node.get();
     node_graph->add_node("buffer_to_texture_node", std::move(buffer_to_texture_node));
+
+    // Texture readback node (for reading color-mapped output back to CPU)
+    auto texture_readback_node = std::make_unique<nodes::TextureReadbackNode>(m_device);
+    texture_readback_node->input_socket("texture").connect(buffer_to_texture_ptr->output_socket("texture"));
+    m_texture_readback_node = texture_readback_node.get();
+    node_graph->add_node("texture_readback_node", std::move(texture_readback_node));
 
     // Store trajectories node pointer for output collection
     m_trajectories_node = trajectories_ptr;
-
-    // NOTE: Buffer readback nodes are disabled for now since wgpuBufferMapAsync callbacks
-    // don't work reliably in Emscripten. We'll need a different approach for reading back results.
-    // For now, we just run the simulation without returning the actual output data.
 
     // Compute topological ordering for run_sync() - we don't use Qt signals in Emscripten
     EM_ASM({ console.log('[C++] Computing topological ordering...'); });
@@ -428,13 +485,31 @@ emscripten::val AvalancheSimulator::collect_output()
 {
     emscripten::val output = emscripten::val::object();
 
-    // For now, just return success status and basic info
-    // Buffer readback is disabled due to wgpuBufferMapAsync callback issues in Emscripten
     output.set("success", true);
     output.set("message", emscripten::val("Simulation completed successfully"));
 
-    // TODO: Implement buffer readback to return actual output data
-    // This requires a different approach for async buffer mapping in the browser
+    // Check if we have texture readback data
+    if (m_texture_readback_node && !m_texture_readback_node->get_data().empty()) {
+        const auto& data = m_texture_readback_node->get_data();
+        uint32_t width = m_texture_readback_node->get_width();
+        uint32_t height = m_texture_readback_node->get_height();
+
+        EM_ASM({ console.log('[C++] Texture readback data available:', $0, 'x', $1, ', size:', $2); },
+               width, height, data.size());
+
+        output.set("width", width);
+        output.set("height", height);
+
+        // Create a Uint8Array from the data
+        // Use typed_memory_view to create a view, then copy to a new Uint8Array
+        emscripten::val memory_view = emscripten::val(emscripten::typed_memory_view(data.size(), data.data()));
+        emscripten::val uint8_array = emscripten::val::global("Uint8Array").new_(memory_view);
+        output.set("imageData", uint8_array);
+
+        EM_ASM({ console.log('[C++] Image data set in output'); });
+    } else {
+        EM_ASM({ console.log('[C++] No texture readback data available'); });
+    }
 
     return output;
 }

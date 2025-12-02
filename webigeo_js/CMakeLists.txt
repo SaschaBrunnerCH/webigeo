@@ -32,6 +32,7 @@ set(SOURCES
     nodes/LoadTextureFromMemoryNode.h nodes/LoadTextureFromMemoryNode.cpp
     nodes/LoadAabbFromMemoryNode.h nodes/LoadAabbFromMemoryNode.cpp
     nodes/BufferReadbackNode.h nodes/BufferReadbackNode.cpp
+    nodes/TextureReadbackNode.h nodes/TextureReadbackNode.cpp
 )
 
 # Use plain add_executable instead of qt_add_executable

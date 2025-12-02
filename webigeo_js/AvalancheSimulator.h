@@ -31,6 +31,7 @@
 #include "Settings.h"
 #include "nodes/LoadTextureFromMemoryNode.h"
 #include "nodes/LoadAabbFromMemoryNode.h"
+#include "nodes/TextureReadbackNode.h"
 
 // Forward declaration
 namespace webgpu_engine::compute::nodes {
@@ -93,6 +94,18 @@ public:
      */
     void process_events();
 
+    /**
+     * Get readback buffer info for JavaScript-based async buffer mapping.
+     * Returns an object with: { bufferPtr, bufferSize, width, height, paddedBytesPerRow, unpaddedBytesPerRow }
+     */
+    emscripten::val get_readback_buffer_info();
+
+    /**
+     * Set the readback data from JavaScript after async buffer mapping completes.
+     * @param data Uint8Array with RGBA8 pixel data
+     */
+    void set_readback_data(emscripten::val data);
+
 public slots:
     void on_run_completed();
     void on_run_failed(webgpu_engine::compute::nodes::GraphRunFailureInfo info);
@@ -140,6 +153,9 @@ private:
 
     // Pointer to trajectories node for output dimensions
     webgpu_engine::compute::nodes::ComputeAvalancheTrajectoriesNode* m_trajectories_node = nullptr;
+    
+    // Pointer to texture readback node for getting image data
+    nodes::TextureReadbackNode* m_texture_readback_node = nullptr;
 
     // Promise callbacks
     emscripten::val m_resolve_callback;

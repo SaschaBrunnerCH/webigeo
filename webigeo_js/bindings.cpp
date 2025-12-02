@@ -91,6 +91,18 @@ void _processEvents(uintptr_t simulator_ptr)
     simulator->process_events();
 }
 
+val _getReadbackBufferInfo(uintptr_t simulator_ptr)
+{
+    auto* simulator = reinterpret_cast<AvalancheSimulator*>(simulator_ptr);
+    return simulator->get_readback_buffer_info();
+}
+
+void _setReadbackData(uintptr_t simulator_ptr, val data)
+{
+    auto* simulator = reinterpret_cast<AvalancheSimulator*>(simulator_ptr);
+    simulator->set_readback_data(data);
+}
+
 } // namespace webigeo_js
 
 // Embind bindings
@@ -109,6 +121,8 @@ EMSCRIPTEN_BINDINGS(webigeo)
     function("_completeInit", &_completeInit);
     function("_startRun", &_startRun);
     function("_processEvents", &_processEvents);
+    function("_getReadbackBufferInfo", &_getReadbackBufferInfo);
+    function("_setReadbackData", &_setReadbackData);
 }
 
 // JavaScript module initialization code
@@ -208,11 +222,80 @@ EM_JS(void, setup_js_helpers, (), {
         };
     };
 
-    // Resolve run promise from C++
-    Module._resolveRun = function(simulatorPtr, result) {
+    // Resolve run promise from C++ - with async buffer readback
+    Module._resolveRun = async function(simulatorPtr, result) {
         var callbacks = Module._simulatorCallbacks && Module._simulatorCallbacks[simulatorPtr];
-        if (callbacks) {
+        if (!callbacks) {
+            console.error('[JS] _resolveRun: No callbacks for simulator', simulatorPtr);
+            return;
+        }
+
+        try {
+            // Get readback buffer info from C++
+            var bufferInfo = Module._getReadbackBufferInfo(simulatorPtr);
+            console.log('[JS] Buffer info:', bufferInfo);
+
+            if (bufferInfo.valid && bufferInfo.bufferPtr && Module.preinitializedWebGPUDevice) {
+                console.log('[JS] Performing async buffer readback...');
+
+                // Get the WebGPU buffer object from the pointer
+                // In emdawnwebgpu, objects are stored via WebGPU.getJsObject()
+                var buffer = null;
+                if (typeof WebGPU !== 'undefined' && WebGPU.getJsObject) {
+                    buffer = WebGPU.getJsObject(bufferInfo.bufferPtr);
+                    console.log('[JS] Got buffer via WebGPU.getJsObject:', buffer);
+                } else {
+                    console.warn('[JS] WebGPU.getJsObject not available');
+                }
+
+                if (buffer) {
+                    // Map the buffer asynchronously
+                    await buffer.mapAsync(GPUMapMode.READ);
+                    console.log('[JS] Buffer mapped successfully');
+
+                    // Get the mapped range
+                    var mappedRange = buffer.getMappedRange();
+                    var srcData = new Uint8Array(mappedRange);
+
+                    // Copy data, removing row padding
+                    var width = bufferInfo.width;
+                    var height = bufferInfo.height;
+                    var paddedBytesPerRow = bufferInfo.paddedBytesPerRow;
+                    var unpaddedBytesPerRow = bufferInfo.unpaddedBytesPerRow;
+
+                    var imageData = new Uint8Array(width * height * 4);
+                    for (var y = 0; y < height; y++) {
+                        var srcOffset = y * paddedBytesPerRow;
+                        var dstOffset = y * unpaddedBytesPerRow;
+                        imageData.set(srcData.subarray(srcOffset, srcOffset + unpaddedBytesPerRow), dstOffset);
+                    }
+
+                    // Unmap the buffer
+                    buffer.unmap();
+
+                    console.log('[JS] Copied', imageData.length, 'bytes of image data');
+
+                    // Send data back to C++
+                    Module._setReadbackData(simulatorPtr, imageData);
+
+                    // Update result with image data
+                    result.imageData = imageData;
+                    result.width = width;
+                    result.height = height;
+                    console.log('[JS] Set result.imageData (' + imageData.length + ' bytes), width=' + width + ', height=' + height);
+                } else {
+                    console.warn('[JS] Could not get WebGPU buffer from pointer');
+                }
+            } else {
+                console.log('[JS] No valid buffer for readback');
+            }
+
             callbacks.resolve(result);
+        } catch (error) {
+            console.error('[JS] Buffer readback error:', error);
+            // Still resolve with the result we have
+            callbacks.resolve(result);
+        } finally {
             delete Module._simulatorCallbacks[simulatorPtr];
         }
     };

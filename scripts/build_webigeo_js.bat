@@ -31,6 +31,7 @@ echo === Configuring weBIGeo JS === >> "%LOG_FILE%" 2>&1
 echo === Configuring weBIGeo JS ===
 cmake -B build_js -G Ninja ^
     -DCMAKE_TOOLCHAIN_FILE="%Qt6_DIR%/lib/cmake/Qt6/qt.toolchain.cmake" ^
+    -DQT_CHAINLOAD_TOOLCHAIN_FILE="%EMSDK_DIR%/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake" ^
     -DCMAKE_BUILD_TYPE=Release ^
     -DQT_HOST_PATH="%Qt6_HOST_DIR%" ^
     -DALP_ENABLE_POSITIONING=OFF ^
