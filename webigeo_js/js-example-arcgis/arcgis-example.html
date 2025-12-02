@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>weBIGeo Avalanche Simulation - ArcGIS JS API 3D</title>
+
+  <!-- ArcGIS JS API -->
+  <link rel="stylesheet" href="https://js.arcgis.com/4.34/esri/themes/light/main.css">
+  <script src="https://js.arcgis.com/4.34/"></script>
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    /* Header */
+    .header {
+      background: linear-gradient(135deg, #1a5276 0%, #2980b9 100%);
+      color: white;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+
+    .header h1 {
+      font-size: 1.4em;
+      font-weight: 500;
+    }
+
+    .header .status {
+      margin-left: auto;
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 0.9em;
+      background: rgba(255,255,255,0.2);
+    }
+
+    .header .status.ready {
+      background: #27ae60;
+    }
+
+    .header .status.error {
+      background: #c0392b;
+    }
+
+    .header .status.loading {
+      background: #f39c12;
+    }
+
+    /* Main content */
+    .main-content {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 320px;
+      background: #f8f9fa;
+      border-right: 1px solid #dee2e6;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
+    .panel {
+      padding: 15px;
+      border-bottom: 1px solid #dee2e6;
+    }
+
+    .panel h3 {
+      font-size: 0.95em;
+      color: #495057;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .form-group {
+      margin-bottom: 12px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.85em;
+      color: #6c757d;
+      margin-bottom: 4px;
+    }
+
+    .form-group input[type="number"],
+    .form-group input[type="text"],
+    .form-group select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #ced4da;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus {
+      outline: none;
+      border-color: #2980b9;
+      box-shadow: 0 0 0 2px rgba(41,128,185,0.2);
+    }
+
+    .form-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .form-row .form-group {
+      flex: 1;
+    }
+
+    /* Buttons */
+    .btn {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 4px;
+      font-size: 0.9em;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-primary {
+      background: #2980b9;
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: #1a5276;
+    }
+
+    .btn-secondary {
+      background: #6c757d;
+      color: white;
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: #545b62;
+    }
+
+    .btn-danger {
+      background: #c0392b;
+      color: white;
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      background: #96281b;
+    }
+
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .btn-block {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    /* Scene container */
+    #viewDiv {
+      flex: 1;
+      position: relative;
+    }
+
+    /* Results panel */
+    .results-panel {
+      background: white;
+    }
+
+    .result-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #eee;
+      font-size: 0.85em;
+    }
+
+    .result-item:last-child {
+      border-bottom: none;
+    }
+
+    .result-label {
+      color: #6c757d;
+    }
+
+    .result-value {
+      font-weight: 500;
+      color: #212529;
+    }
+
+    /* Legend */
+    .legend {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .legend-gradient {
+      width: 100%;
+      height: 12px;
+      border-radius: 2px;
+      background: linear-gradient(to right, #ffff00, #ff8800, #ff0000);
+    }
+
+    .legend-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75em;
+      color: #6c757d;
+      margin-top: 4px;
+    }
+
+    /* Instructions */
+    .instructions {
+      background: #e8f4fd;
+      border-left: 3px solid #2980b9;
+      padding: 10px 12px;
+      font-size: 0.85em;
+      color: #1a5276;
+      margin-bottom: 12px;
+    }
+
+    /* Loading overlay */
+    .loading-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(255,255,255,0.8);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .loading-overlay.hidden {
+      display: none;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #dee2e6;
+      border-top-color: #2980b9;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+      margin-top: 12px;
+      color: #495057;
+      font-size: 0.9em;
+    }
+
+    /* Timings */
+    .timings-list {
+      font-size: 0.8em;
+      max-height: 150px;
+      overflow-y: auto;
+    }
+
+    .timing-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+      color: #6c757d;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="header">
+    <h1>weBIGeo Avalanche Simulation 3D</h1>
+    <div id="status" class="status loading">Initializing...</div>
+  </div>
+
+  <!-- Main content -->
+  <div class="main-content">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <!-- Drawing panel -->
+      <div class="panel">
+        <h3>Release Area</h3>
+        <div class="instructions">
+          Draw polygons on the 3D terrain to define avalanche release areas, then click "Run Simulation".
+        </div>
+        <div class="btn-group">
+          <button id="btn-draw" class="btn btn-primary" disabled>
+            <span>Draw Polygon</span>
+          </button>
+          <button id="btn-clear" class="btn btn-secondary" disabled>
+            <span>Clear</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Settings panel -->
+      <div class="panel">
+        <h3>Simulation Settings</h3>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Particles per Cell</label>
+            <input type="number" id="particles" value="64" min="1" max="1024">
+          </div>
+          <div class="form-group">
+            <label>Simulation Steps</label>
+            <input type="number" id="steps" value="1000" min="100" max="10000">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Max Deviation (deg)</label>
+            <input type="number" id="deviation" value="25" min="0" max="90" step="1">
+          </div>
+          <div class="form-group">
+            <label>Max Runout Angle (deg)</label>
+            <input type="number" id="runout" value="25" min="0" max="45" step="1">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Persistence</label>
+            <input type="number" id="persistence" value="0.9" min="0" max="1" step="0.1">
+          </div>
+          <div class="form-group">
+            <label>Resolution (m/px)</label>
+            <input type="number" id="resolution" value="10" min="1" max="100">
+          </div>
+        </div>
+
+        <button id="btn-run" class="btn btn-primary btn-block" disabled>
+          Run Simulation
+        </button>
+      </div>
+
+      <!-- Results panel -->
+      <div class="panel results-panel">
+        <h3>Results</h3>
+        <div id="results-content">
+          <p style="color: #6c757d; font-size: 0.85em;">No simulation run yet.</p>
+        </div>
+      </div>
+
+      <!-- Layer controls -->
+      <div class="panel">
+        <h3>Output Layer</h3>
+        <div class="form-group">
+          <label>Display</label>
+          <select id="layer-select">
+            <option value="zdelta">Z-Delta (Velocity)</option>
+            <option value="cellCounts">Cell Counts (Probability)</option>
+            <option value="travelLength">Travel Length</option>
+            <option value="travelAngle">Travel Angle</option>
+            <option value="heightDifference">Height Difference</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Opacity</label>
+          <input type="range" id="opacity" value="70" min="0" max="100">
+        </div>
+        <div class="form-group">
+          <label>Elevation Offset (m)</label>
+          <input type="number" id="elevation-offset" value="5" min="0" max="100" step="1">
+        </div>
+        <div class="legend">
+          <div style="width: 100%;">
+            <div class="legend-gradient"></div>
+            <div class="legend-labels">
+              <span>Low</span>
+              <span>High</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3D Scene -->
+    <div id="viewDiv">
+      <div id="loading-overlay" class="loading-overlay">
+        <div class="spinner"></div>
+        <div class="loading-text">Running simulation...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript -->
+  <script>
+    // Load weBIGeo module dynamically
+    let createWebigeoModule = null;
+
+    // ArcGIS modules for 3D
+    require([
+      'esri/Map',
+      'esri/views/SceneView',
+      'esri/layers/GraphicsLayer',
+      'esri/layers/MediaLayer',
+      'esri/layers/support/ImageElement',
+      'esri/layers/support/ExtentAndRotationGeoreference',
+      'esri/geometry/Extent',
+      'esri/geometry/Point',
+      'esri/geometry/Polygon',
+      'esri/geometry/projection',
+      'esri/widgets/Sketch',
+      'esri/Graphic',
+      'esri/symbols/SimpleFillSymbol',
+      'esri/symbols/PolygonSymbol3D',
+      'esri/symbols/FillSymbol3DLayer',
+      'esri/layers/ElevationLayer',
+      'esri/Ground'
+    ], function(
+      Map, SceneView, GraphicsLayer, MediaLayer, ImageElement,
+      ExtentAndRotationGeoreference, Extent, Point, Polygon,
+      projection, Sketch, Graphic, SimpleFillSymbol,
+      PolygonSymbol3D, FillSymbol3DLayer, ElevationLayer, Ground
+    ) {
+      // State
+      let simulator = null;
+      let currentResult = null;
+      let mediaLayer = null;
+
+      // DOM elements
+      const statusEl = document.getElementById('status');
+      const btnDraw = document.getElementById('btn-draw');
+      const btnClear = document.getElementById('btn-clear');
+      const btnRun = document.getElementById('btn-run');
+      const loadingOverlay = document.getElementById('loading-overlay');
+      const resultsContent = document.getElementById('results-content');
+      const layerSelect = document.getElementById('layer-select');
+      const opacitySlider = document.getElementById('opacity');
+      const elevationOffsetInput = document.getElementById('elevation-offset');
+
+      // Hide loading overlay initially
+      loadingOverlay.classList.add('hidden');
+
+      // Create graphics layer for release areas with 3D symbology
+      const sketchLayer = new GraphicsLayer({
+        title: 'Release Areas',
+        elevationInfo: {
+          mode: 'on-the-ground'
+        }
+      });
+
+      // Create elevation layer for terrain
+      const elevationLayer = new ElevationLayer({
+        url: 'https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/Terrain3D/ImageServer'
+      });
+
+      // Create map with terrain
+      const map = new Map({
+        basemap: 'satellite',
+        ground: new Ground({
+          layers: [elevationLayer]
+        }),
+        layers: [sketchLayer]
+      });
+
+      // Create 3D SceneView
+      const view = new SceneView({
+        container: 'viewDiv',
+        map: map,
+        camera: {
+          position: {
+            longitude: 10.5,
+            latitude: 46.75,
+            z: 4000
+          },
+          tilt: 70,
+          heading: 0
+        },
+        environment: {
+          atmosphere: {
+            quality: 'high'
+          },
+          lighting: {
+            date: new Date('June 15, 2024 10:00:00 UTC'),
+            directShadowsEnabled: true
+          }
+        },
+        qualityProfile: 'high'
+      });
+
+      // Create sketch widget for 3D
+      const sketch = new Sketch({
+        view: view,
+        layer: sketchLayer,
+        creationMode: 'single',
+        availableCreateTools: ['polygon'],
+        defaultCreateOptions: {
+          mode: 'click'
+        },
+        // Use 3D symbol for sketching
+        polygonSymbol: new PolygonSymbol3D({
+          symbolLayers: [
+            new FillSymbol3DLayer({
+              material: { color: [255, 0, 0, 0.4] },
+              outline: { color: [255, 0, 0, 1], size: 2 }
+            })
+          ]
+        })
+      });
+
+      // Initialize
+      view.when(async () => {
+        await projection.load();
+
+        // Initialize weBIGeo simulator
+        try {
+          // Load weBIGeo module dynamically (ES module)
+          const webigeoModule = await import('./webigeo.js?v=' + Date.now());
+          createWebigeoModule = webigeoModule.default;
+
+          const module = await createWebigeoModule();
+          const isSupported = await module.AvalancheSimulator.isSupported();
+          if (!isSupported) throw new Error('WebGPU not supported');
+          simulator = new module.AvalancheSimulator();
+          await simulator.init();
+
+          console.log('weBIGeo simulator initialized');
+
+          setStatus('ready', 'Ready');
+          enableControls(true);
+        } catch (error) {
+          console.error('Initialization failed:', error);
+          setStatus('error', 'Error: ' + error.message);
+        }
+      });
+
+      // Button handlers
+      btnDraw.addEventListener('click', () => {
+        sketch.create('polygon');
+      });
+
+      btnClear.addEventListener('click', () => {
+        sketchLayer.removeAll();
+        if (mediaLayer) {
+          map.remove(mediaLayer);
+          mediaLayer = null;
+        }
+        resultsContent.innerHTML = '<p style="color: #6c757d; font-size: 0.85em;">No simulation run yet.</p>';
+      });
+
+      btnRun.addEventListener('click', runSimulation);
+
+      // Layer controls
+      layerSelect.addEventListener('change', updateVisualization);
+      opacitySlider.addEventListener('input', () => {
+        if (mediaLayer) {
+          mediaLayer.opacity = opacitySlider.value / 100;
+        }
+      });
+      elevationOffsetInput.addEventListener('change', updateVisualization);
+
+      // Helper functions
+      function setStatus(type, text) {
+        statusEl.className = 'status ' + type;
+        statusEl.textContent = text;
+      }
+
+      function enableControls(enabled) {
+        btnDraw.disabled = !enabled;
+        btnClear.disabled = !enabled;
+        btnRun.disabled = !enabled;
+      }
+
+      function showLoading(show, text = 'Running simulation...') {
+        if (show) {
+          loadingOverlay.classList.remove('hidden');
+          loadingOverlay.querySelector('.loading-text').textContent = text;
+        } else {
+          loadingOverlay.classList.add('hidden');
+        }
+      }
+
+      // Run simulation
+      async function runSimulation() {
+        const graphics = sketchLayer.graphics.toArray();
+        if (graphics.length === 0) {
+          alert('Please draw at least one release area polygon.');
+          return;
+        }
+
+        showLoading(true);
+        enableControls(false);
+        setStatus('loading', 'Simulating...');
+
+        try {
+          // Get combined extent of all polygons
+          let extent = null;
+          for (const g of graphics) {
+            if (!extent) {
+              extent = g.geometry.extent.clone();
+            } else {
+              extent = extent.union(g.geometry.extent);
+            }
+          }
+
+          // Expand extent by 50%
+          extent = extent.expand(1.5);
+
+          // Project to Web Mercator
+          const webMercatorExtent = projection.project(extent, { wkid: 3857 });
+
+          // Get settings
+          const settings = {
+            numParticlesPerReleaseCell: parseInt(document.getElementById('particles').value),
+            numSimulationSteps: parseInt(document.getElementById('steps').value),
+            maxRandomDeviation: parseFloat(document.getElementById('deviation').value),
+            maxRunoutAngle: parseFloat(document.getElementById('runout').value),
+            persistence: parseFloat(document.getElementById('persistence').value)
+          };
+
+          const resolution = parseFloat(document.getElementById('resolution').value);
+
+          // Calculate dimensions
+          const width = Math.ceil((webMercatorExtent.xmax - webMercatorExtent.xmin) / resolution);
+          const height = Math.ceil((webMercatorExtent.ymax - webMercatorExtent.ymin) / resolution);
+
+          console.log(`Simulation area: ${width}x${height} pixels at ${resolution}m resolution`);
+
+          // Fetch heightmap (demo: generate fake data)
+          showLoading(true, 'Fetching elevation data...');
+          const heightmap = await fetchHeightmap(webMercatorExtent, width, height);
+
+          // Create release cells mask
+          showLoading(true, 'Creating release cells...');
+          const releaseCells = createReleaseCellsMask(graphics, webMercatorExtent, width, height);
+
+          // Run simulation
+          showLoading(true, 'Running GPU simulation...');
+
+          if (simulator) {
+            // Real simulation
+            const input = {
+              aabb: {
+                minX: webMercatorExtent.xmin,
+                minY: webMercatorExtent.ymin,
+                maxX: webMercatorExtent.xmax,
+                maxY: webMercatorExtent.ymax
+              },
+              heightmap: heightmap,
+              releaseCells: releaseCells
+            };
+
+            currentResult = await simulator.run(input, settings);
+            console.log('[ArcGIS] Simulation result:', currentResult);
+            console.log('[ArcGIS] Has imageData:', !!currentResult.imageData);
+            console.log('[ArcGIS] imageData length:', currentResult.imageData ? currentResult.imageData.length : 0);
+            console.log('[ArcGIS] width:', currentResult.width, 'height:', currentResult.height);
+          } else {
+            // Demo: generate fake result
+            currentResult = generateDemoResult(width, height, releaseCells);
+          }
+
+          currentResult.extent = webMercatorExtent;
+
+          // Display results
+          displayResults(currentResult);
+          updateVisualization();
+
+          setStatus('ready', 'Complete');
+        } catch (error) {
+          console.error('Simulation failed:', error);
+          setStatus('error', 'Error: ' + error.message);
+          alert('Simulation failed: ' + error.message);
+        } finally {
+          showLoading(false);
+          enableControls(true);
+        }
+      }
+
+      // Fetch heightmap from elevation service
+      async function fetchHeightmap(extent, width, height) {
+        // In production, fetch from ArcGIS Elevation Service:
+        // const url = 'https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/Terrain3D/ImageServer/exportImage';
+
+        // Demo: generate synthetic terrain
+        const data = new Uint8Array(width * height * 4);
+
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            // Generate mountain-like terrain
+            const nx = x / width;
+            const ny = y / height;
+            const elevation = 2000 +
+              500 * Math.sin(nx * Math.PI * 2) * Math.cos(ny * Math.PI * 2) +
+              200 * Math.sin(nx * Math.PI * 8) * Math.cos(ny * Math.PI * 8) +
+              ny * 1000; // Slope from south to north
+
+            // Encode as 16-bit in R+G channels
+            const encoded = Math.floor(elevation * 8);
+            const idx = (y * width + x) * 4;
+            data[idx + 0] = (encoded >> 8) & 0xFF; // R: high byte
+            data[idx + 1] = encoded & 0xFF;        // G: low byte
+            data[idx + 2] = 0;
+            data[idx + 3] = 255;
+          }
+        }
+
+        return { width, height, data };
+      }
+
+      // Create release cells mask from polygons
+      function createReleaseCellsMask(graphics, extent, width, height) {
+        const data = new Uint8Array(width * height * 4);
+        const cellWidth = (extent.xmax - extent.xmin) / width;
+        const cellHeight = (extent.ymax - extent.ymin) / height;
+
+        for (const graphic of graphics) {
+          const polygon = graphic.geometry;
+          const projectedPolygon = projection.project(polygon, { wkid: 3857 });
+
+          for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+              const px = extent.xmin + (x + 0.5) * cellWidth;
+              const py = extent.ymax - (y + 0.5) * cellHeight;
+
+              const point = new Point({
+                x: px,
+                y: py,
+                spatialReference: { wkid: 3857 }
+              });
+
+              if (projectedPolygon.contains(point)) {
+                const idx = (y * width + x) * 4;
+                data[idx + 0] = 255; // R
+                data[idx + 1] = 0;   // G
+                data[idx + 2] = 0;   // B
+                data[idx + 3] = 255; // A (marks as release cell)
+              }
+            }
+          }
+        }
+
+        return { width, height, data };
+      }
+
+      // Generate demo result (when simulator not available)
+      function generateDemoResult(width, height, releaseCells) {
+        const zdelta = new Float32Array(width * height);
+        const cellCounts = new Float32Array(width * height);
+        const travelLength = new Float32Array(width * height);
+        const travelAngle = new Float32Array(width * height);
+        const heightDifference = new Float32Array(width * height);
+
+        // Find release cells and simulate spread
+        const releasePoints = [];
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            const idx = (y * width + x) * 4;
+            if (releaseCells.data[idx + 3] > 0) {
+              releasePoints.push({ x, y });
+            }
+          }
+        }
+
+        // Simulate avalanche spread (simplified demo)
+        for (const rp of releasePoints) {
+          for (let dy = 0; dy < height - rp.y; dy++) {
+            const spreadX = Math.floor(dy * 0.3);
+            for (let dx = -spreadX; dx <= spreadX; dx++) {
+              const x = rp.x + dx;
+              const y = rp.y + dy;
+              if (x >= 0 && x < width && y >= 0 && y < height) {
+                const idx = y * width + x;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const intensity = Math.max(0, 1 - dist / (height * 0.8));
+
+                zdelta[idx] = Math.max(zdelta[idx], intensity * 500);
+                cellCounts[idx] += intensity * 100;
+                travelLength[idx] = Math.max(travelLength[idx], dist * 10);
+                travelAngle[idx] = Math.max(travelAngle[idx], 30 - intensity * 20);
+                heightDifference[idx] = Math.max(heightDifference[idx], intensity * 800);
+              }
+            }
+          }
+        }
+
+        return {
+          width,
+          height,
+          zdelta,
+          cellCounts,
+          travelLength,
+          travelAngle,
+          heightDifference,
+          timings: {
+            'total': 150,
+            'trajectories': 120,
+            'readback': 30
+          }
+        };
+      }
+
+      // Display results summary
+      function displayResults(result) {
+        // Handle result with imageData (color-mapped texture readback)
+        if (result.success && result.imageData) {
+          resultsContent.innerHTML = `
+            <div class="result-item">
+              <span class="result-label">Status</span>
+              <span class="result-value" style="color: #27ae60;">Completed</span>
+            </div>
+            <div class="result-item">
+              <span class="result-label">Output Size</span>
+              <span class="result-value">${result.width} x ${result.height}</span>
+            </div>
+            <div class="result-item">
+              <span class="result-label">Image Data</span>
+              <span class="result-value">${result.imageData.length} bytes</span>
+            </div>
+          `;
+          return;
+        }
+
+        // Handle simplified result (success only, no data)
+        if (result.success && !result.zdelta && !result.imageData) {
+          resultsContent.innerHTML = `
+            <div class="result-item">
+              <span class="result-label">Status</span>
+              <span class="result-value" style="color: #27ae60;">Completed</span>
+            </div>
+            <div class="result-item">
+              <span class="result-label">Message</span>
+              <span class="result-value">${result.message || 'Simulation ran successfully'}</span>
+            </div>
+            <p style="margin-top: 12px; font-size: 0.8em; color: #6c757d;">
+              Note: Result data readback is not yet implemented.
+              The GPU simulation completed successfully.
+            </p>
+          `;
+          return;
+        }
+
+        // Full result with data arrays
+        let maxZdelta = 0, maxCounts = 0, maxLength = 0;
+        for (let i = 0; i < result.zdelta.length; i++) {
+          if (result.zdelta[i] > maxZdelta) maxZdelta = result.zdelta[i];
+          if (result.cellCounts[i] > maxCounts) maxCounts = result.cellCounts[i];
+          if (result.travelLength[i] > maxLength) maxLength = result.travelLength[i];
+        }
+
+        const maxVelocity = Math.sqrt(2 * 9.81 * maxZdelta);
+
+        resultsContent.innerHTML = `
+          <div class="result-item">
+            <span class="result-label">Dimensions</span>
+            <span class="result-value">${result.width} x ${result.height}</span>
+          </div>
+          <div class="result-item">
+            <span class="result-label">Max Z-Delta</span>
+            <span class="result-value">${maxZdelta.toFixed(1)} m</span>
+          </div>
+          <div class="result-item">
+            <span class="result-label">Max Velocity</span>
+            <span class="result-value">${maxVelocity.toFixed(1)} m/s</span>
+          </div>
+          <div class="result-item">
+            <span class="result-label">Max Travel Length</span>
+            <span class="result-value">${maxLength.toFixed(0)} m</span>
+          </div>
+          <div class="result-item">
+            <span class="result-label">Max Cell Count</span>
+            <span class="result-value">${maxCounts.toFixed(0)}</span>
+          </div>
+          ${result.timings ? `
+          <h4 style="margin-top: 12px; font-size: 0.85em; color: #495057;">Timings</h4>
+          <div class="timings-list">
+            ${Object.entries(result.timings).map(([k, v]) => `
+              <div class="timing-item">
+                <span>${k}</span>
+                <span>${v.toFixed(1)} ms</span>
+              </div>
+            `).join('')}
+          </div>
+          ` : ''}
+        `;
+      }
+
+      // Update visualization on 3D scene
+      function updateVisualization() {
+        console.log('[ArcGIS] updateVisualization called');
+        if (!currentResult) {
+          console.log('[ArcGIS] No currentResult');
+          return;
+        }
+
+        console.log('[ArcGIS] currentResult:', currentResult);
+        console.log('[ArcGIS] imageData present:', !!currentResult.imageData);
+
+        // Handle imageData from texture readback
+        if (currentResult.imageData && currentResult.width && currentResult.height) {
+          console.log('[ArcGIS] Using imageData for visualization');
+          // Create canvas from raw imageData
+          const canvas = document.createElement('canvas');
+          canvas.width = currentResult.width;
+          canvas.height = currentResult.height;
+          const ctx = canvas.getContext('2d');
+          const imageData = ctx.createImageData(canvas.width, canvas.height);
+
+          // Copy the RGBA data from the readback
+          for (let i = 0; i < currentResult.imageData.length; i++) {
+            imageData.data[i] = currentResult.imageData[i];
+          }
+
+          ctx.putImageData(imageData, 0, 0);
+
+          // Add to 3D scene
+          addCanvasToScene(canvas, currentResult.extent);
+          return;
+        }
+
+        // Skip if no data arrays (simplified result)
+        if (currentResult.success && !currentResult.zdelta) {
+          return;
+        }
+
+        const layerType = layerSelect.value;
+        const data = currentResult[layerType];
+        if (!data) return;
+
+        // Render to canvas
+        const canvas = document.createElement('canvas');
+        canvas.width = currentResult.width;
+        canvas.height = currentResult.height;
+        const ctx = canvas.getContext('2d');
+        const imageData = ctx.createImageData(canvas.width, canvas.height);
+
+        // Find max value for normalization
+        let maxVal = 0;
+        for (const val of data) {
+          if (val > maxVal) maxVal = val;
+        }
+
+        // Color mapping
+        for (let i = 0; i < data.length; i++) {
+          const normalized = maxVal > 0 ? data[i] / maxVal : 0;
+          const idx = i * 4;
+
+          if (normalized > 0.01) {
+            // Yellow to red gradient
+            imageData.data[idx + 0] = 255;
+            imageData.data[idx + 1] = Math.floor((1 - normalized) * 255);
+            imageData.data[idx + 2] = 0;
+            imageData.data[idx + 3] = Math.floor(normalized * 200 + 55);
+          } else {
+            imageData.data[idx + 3] = 0; // Transparent
+          }
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+
+        // Add to 3D scene
+        addCanvasToScene(canvas, currentResult.extent);
+      }
+
+      // Add a canvas as a draped layer on the 3D terrain
+      function addCanvasToScene(canvas, extent) {
+        // Remove old layer
+        if (mediaLayer) {
+          map.remove(mediaLayer);
+        }
+
+        const elevationOffset = parseFloat(elevationOffsetInput.value) || 5;
+
+        // Create new media layer from canvas with elevation info for 3D
+        const imageElement = new ImageElement({
+          image: canvas.toDataURL('image/png'),
+          georeference: new ExtentAndRotationGeoreference({
+            extent: new Extent({
+              xmin: extent.xmin,
+              ymin: extent.ymin,
+              xmax: extent.xmax,
+              ymax: extent.ymax,
+              spatialReference: { wkid: 3857 }
+            })
+          })
+        });
+
+        mediaLayer = new MediaLayer({
+          source: [imageElement],
+          title: 'Avalanche Simulation',
+          opacity: opacitySlider.value / 100,
+          // Drape on the terrain surface with a small offset
+          elevationInfo: {
+            mode: 'relative-to-ground',
+            offset: elevationOffset
+          }
+        });
+
+        map.add(mediaLayer);
+
+        console.log('[ArcGIS] Added simulation result to 3D scene');
+      }
+    });
+  </script>
+</body>
+</html>
