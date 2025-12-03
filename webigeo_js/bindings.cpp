@@ -329,6 +329,122 @@ EM_JS(void, setup_js_helpers, (), {
                 console.log('[JS] No valid buffer for readback');
             }
 
+            // Handle time-series buffer readback if available
+            if (bufferInfo.timeSeries && bufferInfo.timeSeries.valid && Module.preinitializedWebGPUDevice) {
+                console.log('[JS] Processing time-series buffer readback...');
+
+                var tsInfo = bufferInfo.timeSeries;
+                var srcBuffer = null;
+
+                if (typeof WebGPU !== 'undefined' && WebGPU.getJsObject) {
+                    srcBuffer = WebGPU.getJsObject(tsInfo.bufferPtr);
+                }
+
+                if (srcBuffer) {
+                    try {
+                        var device = Module.preinitializedWebGPUDevice;
+                        var bufferSize = tsInfo.bufferSize;
+
+                        // Create a staging buffer with MAP_READ capability
+                        var stagingBuffer = device.createBuffer({
+                            size: bufferSize,
+                            usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+                            mappedAtCreation: false
+                        });
+
+                        // Copy from source storage buffer to staging buffer
+                        var commandEncoder = device.createCommandEncoder();
+                        commandEncoder.copyBufferToBuffer(srcBuffer, 0, stagingBuffer, 0, bufferSize);
+                        var commands = commandEncoder.finish();
+                        device.queue.submit([commands]);
+
+                        console.log('[JS] Time-series copy submitted, buffer size:', bufferSize);
+
+                        // Wait for GPU work to complete, then map the staging buffer
+                        await device.queue.onSubmittedWorkDone();
+                        await stagingBuffer.mapAsync(GPUMapMode.READ);
+                        console.log('[JS] Time-series staging buffer mapped');
+
+                        // Get the mapped range
+                        var mappedRange = stagingBuffer.getMappedRange();
+                        var srcData = new Uint32Array(mappedRange);
+
+                        // Copy the data
+                        var tsData = new Uint32Array(srcData.length);
+                        tsData.set(srcData);
+
+                        // Unmap and destroy the staging buffer
+                        stagingBuffer.unmap();
+                        stagingBuffer.destroy();
+
+                        console.log('[JS] Copied', tsData.length, 'uint32 values for time-series');
+
+                        // Update result.timeSeries with the actual data
+                        if (!result.timeSeries) {
+                            result.timeSeries = {};
+                        }
+                        result.timeSeries.data = tsData;
+                        result.timeSeries.enabled = true;
+                        result.timeSeries.width = tsInfo.width;
+                        result.timeSeries.height = tsInfo.height;
+                        result.timeSeries.maxFrames = tsInfo.maxFrames;
+                        result.timeSeries.timeInterval = tsInfo.timeInterval;
+                        result.timeSeries.referenceHeight = tsInfo.referenceHeight;
+
+                        console.log('[JS] Time-series data ready: ' + tsInfo.width + 'x' + tsInfo.height + ' x ' + tsInfo.maxFrames + ' frames');
+
+                        // Now read back the deposition buffer if available
+                        console.log('[JS] Deposition buffer info: ptr=' + tsInfo.depositionBufferPtr + ', size=' + tsInfo.depositionBufferSize);
+                        if (tsInfo.depositionBufferPtr && tsInfo.depositionBufferSize > 0) {
+                            var depositionSrcBuffer = null;
+                            if (typeof WebGPU !== 'undefined' && WebGPU.getJsObject) {
+                                depositionSrcBuffer = WebGPU.getJsObject(tsInfo.depositionBufferPtr);
+                            }
+
+                            if (depositionSrcBuffer) {
+                                console.log('[JS] Reading deposition buffer...');
+
+                                // Create a staging buffer for deposition
+                                var depositionStagingBuffer = device.createBuffer({
+                                    size: tsInfo.depositionBufferSize,
+                                    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+                                    mappedAtCreation: false
+                                });
+
+                                // Copy deposition data
+                                var depositionEncoder = device.createCommandEncoder();
+                                depositionEncoder.copyBufferToBuffer(depositionSrcBuffer, 0, depositionStagingBuffer, 0, tsInfo.depositionBufferSize);
+                                var depositionCommands = depositionEncoder.finish();
+                                device.queue.submit([depositionCommands]);
+
+                                // Wait and map
+                                await device.queue.onSubmittedWorkDone();
+                                await depositionStagingBuffer.mapAsync(GPUMapMode.READ);
+
+                                var depositionMappedRange = depositionStagingBuffer.getMappedRange();
+                                var depositionSrcData = new Uint32Array(depositionMappedRange);
+
+                                // Copy the deposition data
+                                var depositionData = new Uint32Array(depositionSrcData.length);
+                                depositionData.set(depositionSrcData);
+
+                                depositionStagingBuffer.unmap();
+                                depositionStagingBuffer.destroy();
+
+                                result.timeSeries.depositionData = depositionData;
+                                console.log('[JS] Deposition data ready:', depositionData.length, 'uint32 values');
+                            } else {
+                                console.warn('[JS] Could not get deposition buffer object');
+                            }
+                        }
+                    } catch (tsError) {
+                        console.error('[JS] Time-series buffer readback error:', tsError);
+                    }
+                } else {
+                    console.warn('[JS] Could not get WebGPU buffer for time-series');
+                }
+            }
+
             callbacks.resolve(result);
         } catch (error) {
             console.error('[JS] Buffer readback error:', error);

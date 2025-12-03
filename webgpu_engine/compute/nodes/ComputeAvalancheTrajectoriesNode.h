@@ -87,6 +87,13 @@ public:
         uint32_t layer5_altitudeDifference_enabled = 1u;
     };
 
+    struct TimeSeriesSettings {
+        uint32_t enabled = 0;           // 0 = disabled, 1 = enabled
+        uint32_t max_frames = 100;      // Maximum number of time frames to store
+        float time_interval = 1.0f;     // Time interval between snapshots (seconds)
+        float reference_height = 1.0f;  // Reference flow height for normalization (meters)
+    };
+
     struct AvalancheTrajectoriesSettings {
         uint32_t resolution_multiplier = 1;
         uint32_t num_steps = 2048;
@@ -119,6 +126,8 @@ public:
         RunoutFlowPyParams runout_flowpy;
 
         OutputLayerParams output_layer;
+
+        TimeSeriesSettings timeseries;
 
         uint32_t random_seed = 1u;
     };
@@ -165,6 +174,19 @@ private:
         // ^^ 8 byte ^^
 
         uint32_t random_seed;
+
+        // Time-series settings
+        uint32_t timeseries_enabled;
+        uint32_t timeseries_max_frames;
+        float timeseries_interval;
+        // ^^ 4 byte ^^
+        float timeseries_reference_height;
+        // Padding to 16-byte alignment (176 bytes total)
+        uint32_t _padding1;
+        uint32_t _padding2;
+        uint32_t _padding3;
+        uint32_t _padding4;
+        // ^^ 4 byte ^^
     };
 
 public:
@@ -199,6 +221,12 @@ private:
     std::unique_ptr<webgpu::raii::RawBuffer<uint32_t>> m_layer3_travelLength_buffer;
     std::unique_ptr<webgpu::raii::RawBuffer<uint32_t>> m_layer4_travelAngle_buffer;
     std::unique_ptr<webgpu::raii::RawBuffer<uint32_t>> m_layer5_altitudeDifference_buffer;
+
+    // Time-series flow height buffer: stores H(x,y,t) as particle counts per cell per time frame
+    std::unique_ptr<webgpu::raii::RawBuffer<uint32_t>> m_flow_height_timeseries_buffer;
+
+    // Time-series deposition buffer: stores D(x,y,t) as deposited particle counts when particles stop
+    std::unique_ptr<webgpu::raii::RawBuffer<uint32_t>> m_deposition_timeseries_buffer;
 
     glm::uvec2 m_output_dimensions;
 };

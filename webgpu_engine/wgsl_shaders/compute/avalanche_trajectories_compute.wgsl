@@ -77,6 +77,17 @@ struct AvalancheTrajectoriesSettings {
     layer5_altitudeDifference_enabled: u32,
 
     random_seed: u32,
+
+    // Time-series settings
+    timeseries_enabled: u32,        // 0 = disabled, 1 = enabled
+    timeseries_max_frames: u32,     // Maximum number of time frames to store
+    timeseries_interval: f32,       // Time interval between snapshots (seconds)
+    timeseries_reference_height: f32, // Reference flow height for normalization (meters)
+    // Padding to 16-byte alignment (176 bytes total)
+    _padding1: u32,
+    _padding2: u32,
+    _padding3: u32,
+    _padding4: u32,
 }
 
 // input
@@ -96,6 +107,15 @@ struct AvalancheTrajectoriesSettings {
 @group(0) @binding(9) var<storage, read_write> output_layer3_travelLength: array<atomic<u32>>;
 @group(0) @binding(10) var<storage, read_write> output_layer4_travelAngle: array<atomic<u32>>;
 @group(0) @binding(11) var<storage, read_write> output_layer5_altitudeDifference: array<atomic<u32>>;
+
+// Time-series flow height buffer: stores H(x,y,t) as particle counts per cell per time frame
+// Layout: [frame0_cell0, frame0_cell1, ..., frame0_cellN, frame1_cell0, frame1_cell1, ..., frameM_cellN]
+// Index = time_frame * (width * height) + y * width + x
+@group(0) @binding(12) var<storage, read_write> output_flow_height_timeseries: array<atomic<u32>>;
+
+// Time-series deposition buffer: stores D(x,y,t) as deposited particle counts when particles stop
+// Same layout as flow height buffer. Records when and where particles come to rest.
+@group(0) @binding(13) var<storage, read_write> output_deposition_timeseries: array<atomic<u32>>;
 
 // note: as of writing this, wgsl only supports atomic access for storage buffers and only for u32 and i32
 //       therefore, we first write the risk value (along the trajectory as raster) into a buffer,
@@ -180,6 +200,54 @@ fn draw_line_pos(start_pos: vec2u, end_pos: vec2u, value: f32, z_delta: f32, tra
     }
 }
 
+// Records a flow height snapshot at the given UV position for a specific time frame.
+// Flow height is estimated by counting particles in each cell and normalizing.
+fn record_flow_height_snapshot(current_uv: vec2f, time_frame: u32) {
+    if (settings.timeseries_enabled == 0u || time_frame >= settings.timeseries_max_frames) {
+        return;
+    }
+
+    // Convert UV to cell position
+    let cell_pos = vec2u(floor(current_uv * vec2f(settings.output_resolution)));
+
+    // Bounds check
+    if (cell_pos.x >= settings.output_resolution.x || cell_pos.y >= settings.output_resolution.y) {
+        return;
+    }
+
+    // Calculate buffer index: time_frame * (width * height) + y * width + x
+    let frame_offset = time_frame * settings.output_resolution.x * settings.output_resolution.y;
+    let cell_offset = cell_pos.y * settings.output_resolution.x + cell_pos.x;
+    let buffer_index = frame_offset + cell_offset;
+
+    // Increment particle count at this cell for this time frame
+    atomicAdd(&output_flow_height_timeseries[buffer_index], 1u);
+}
+
+// Records a deposition event when a particle stops at the given UV position for a specific time frame.
+// Deposition accumulates over time - particles that stop remain deposited in all subsequent frames.
+fn record_deposition(current_uv: vec2f, time_frame: u32) {
+    if (settings.timeseries_enabled == 0u || time_frame >= settings.timeseries_max_frames) {
+        return;
+    }
+
+    // Convert UV to cell position
+    let cell_pos = vec2u(floor(current_uv * vec2f(settings.output_resolution)));
+
+    // Bounds check
+    if (cell_pos.x >= settings.output_resolution.x || cell_pos.y >= settings.output_resolution.y) {
+        return;
+    }
+
+    // Record deposition at this time frame
+    let frame_offset = time_frame * settings.output_resolution.x * settings.output_resolution.y;
+    let cell_offset = cell_pos.y * settings.output_resolution.x + cell_pos.x;
+    let buffer_index = frame_offset + cell_offset;
+
+    // Increment deposited particle count at this cell for this time frame
+    atomicAdd(&output_deposition_timeseries[buffer_index], 1u);
+}
+
 // ***** MODELS *****
 
 
@@ -230,8 +298,12 @@ fn trajectory_overlay(id: vec3<u32>) {
     var last_direction = vec2f(0, 0);
 
     var z_delta = 0f;
-    
+
     var velocity_magnitude = 0f;
+
+    // Time-series tracking variables
+    var total_time: f32 = 0.0;
+    var last_recorded_time_frame: u32 = 0xFFFFFFFFu; // Start with invalid frame to trigger first recording
 
     for (var i: u32 = 0; i < settings.num_steps; i++) {
         // compute uv coordinates for current position
@@ -272,6 +344,11 @@ fn trajectory_overlay(id: vec3<u32>) {
             if (settings.model_type == 0) {
                 // more info: https://docs.avaframe.org/en/latest/theoryCom4FlowPy.html
                 if (z_delta <= 0) {
+                    // Particle stopped due to runout condition - record deposition
+                    if (settings.timeseries_enabled != 0u) {
+                        let stop_time_frame = u32(total_time / settings.timeseries_interval);
+                        record_deposition(current_uv, stop_time_frame);
+                    }
                     break;
                 }
             }
@@ -296,6 +373,11 @@ fn trajectory_overlay(id: vec3<u32>) {
 
             let dir_magnitude = length(current_direction);
             if (dir_magnitude < 0.001) { //check potential 0-division before normalization
+                // Particle stopped due to zero direction - record deposition
+                if (settings.timeseries_enabled != 0u) {
+                    let stop_time_frame = u32(total_time / settings.timeseries_interval);
+                    record_deposition(current_uv, stop_time_frame);
+                }
                 break;
             }
             let normalized_current_direction = current_direction / dir_magnitude;
@@ -306,6 +388,25 @@ fn trajectory_overlay(id: vec3<u32>) {
 
             world_space_offset = world_space_offset + relative_trajectory;
             world_space_travel_distance += length(relative_trajectory);
+
+            // Time-series recording for Model 0
+            if (settings.timeseries_enabled != 0u) {
+                // Estimate time step based on velocity: dt = distance / velocity
+                // Use a minimum velocity to avoid division by zero
+                let min_velocity: f32 = 1.0;
+                let effective_velocity = max(velocity_magnitude, min_velocity);
+                let step_dt = length(relative_trajectory) / effective_velocity;
+                total_time += step_dt;
+
+                // Determine which time frame we're in
+                let current_time_frame = u32(total_time / settings.timeseries_interval);
+
+                // Record snapshot if we've entered a new time frame
+                if (current_time_frame != last_recorded_time_frame && current_time_frame < settings.timeseries_max_frames) {
+                    record_flow_height_snapshot(current_uv, current_time_frame);
+                    last_recorded_time_frame = current_time_frame;
+                }
+            }
         } else if (settings.model_type == 1) {
             let acceleration_normal = g * normal.z * normal;
             let acceleration_tangential = acceleration_gravity + acceleration_normal;

@@ -80,6 +80,36 @@ export interface SimulationInput {
 }
 
 /**
+ * Time-series output settings for flow height H(x,y,t)
+ */
+export interface TimeSeriesSettings {
+  /**
+   * Enable time-series flow height output.
+   * @default false
+   */
+  enabled?: boolean;
+
+  /**
+   * Maximum number of time frames to store.
+   * @default 100
+   */
+  maxFrames?: number;
+
+  /**
+   * Time interval between snapshots (seconds).
+   * @default 1.0
+   */
+  timeInterval?: number;
+
+  /**
+   * Reference flow height for normalization (meters).
+   * H = (particle_count / particles_per_cell) * referenceHeight
+   * @default 1.0
+   */
+  referenceHeight?: number;
+}
+
+/**
  * Simulation settings (all optional with defaults matching CLI)
  */
 export interface SimulationSettings {
@@ -142,6 +172,52 @@ export interface SimulationSettings {
    * @default 25
    */
   maxRunoutAngle?: number;
+
+  /**
+   * Time-series output settings.
+   * When enabled, outputs flow height H(x,y,t) as particle counts per cell per time frame.
+   */
+  timeSeries?: TimeSeriesSettings;
+}
+
+/**
+ * Time-series output data for flow height H(x,y,t)
+ */
+export interface TimeSeriesOutput {
+  /** Time-series was enabled */
+  enabled: boolean;
+
+  /** Maximum number of time frames stored */
+  maxFrames: number;
+
+  /** Time interval between snapshots (seconds) */
+  timeInterval: number;
+
+  /** Reference flow height used for normalization (meters) */
+  referenceHeight: number;
+
+  /** Output width in pixels */
+  width: number;
+
+  /** Output height in pixels */
+  height: number;
+
+  /**
+   * WebGPU buffer pointer for async readback.
+   * Use WebGPU.getJsObject(bufferPtr) to get the GPU buffer object.
+   */
+  bufferPtr: number;
+
+  /** Buffer size in bytes */
+  bufferSize: number;
+
+  /**
+   * Flow height data H(x,y,t) as particle counts per cell per time frame.
+   * Layout: data[t * width * height + y * width + x]
+   * To get flow height: H = (count / particles_per_cell) * referenceHeight
+   * Populated after async buffer readback from JavaScript.
+   */
+  data?: Uint32Array;
 }
 
 /**
@@ -190,6 +266,12 @@ export interface SimulationOutput {
    * Timing information for each compute node (milliseconds).
    */
   timings?: Record<string, number>;
+
+  /**
+   * Time-series flow height output H(x,y,t).
+   * Only present if timeSeries.enabled was true in settings.
+   */
+  timeSeries?: TimeSeriesOutput;
 }
 
 /**

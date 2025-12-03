@@ -453,6 +453,30 @@
           </div>
         </div>
 
+        <div class="form-group" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #dee2e6;">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+            <input type="checkbox" id="timeseries-enabled" style="width: auto;">
+            <span>Enable Time-Series H(x,y,t)</span>
+          </label>
+        </div>
+
+        <div id="timeseries-settings" style="display: none;">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Max Frames</label>
+              <input type="number" id="timeseries-max-frames" value="100" min="10" max="500">
+            </div>
+            <div class="form-group">
+              <label>Time Interval (s)</label>
+              <input type="number" id="timeseries-interval" value="1.0" min="0.1" max="10" step="0.1">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Reference Height (m)</label>
+            <input type="number" id="timeseries-ref-height" value="1.0" min="0.1" max="10" step="0.1">
+          </div>
+        </div>
+
         <button id="btn-run" class="btn btn-primary btn-block" disabled>
           Run Simulation
         </button>
@@ -477,7 +501,34 @@
             <option value="travelLength">Travel Length</option>
             <option value="travelAngle">Travel Angle</option>
             <option value="heightDifference">Height Difference</option>
+            <option value="timeseries">Flow Height H(x,y,t)</option>
           </select>
+        </div>
+
+        <!-- Time-series animation controls (hidden by default) -->
+        <div id="timeseries-controls" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid #dee2e6;">
+          <div id="timeseries-no-data" style="color: #6c757d; font-size: 0.85em; padding: 8px; background: #f1f3f4; border-radius: 4px;">
+            Run simulation with time-series enabled to view animation.
+          </div>
+          <div id="timeseries-player" style="display: none;">
+            <div class="form-group">
+              <label>Time Frame: <span id="current-frame">0</span> / <span id="total-frames">0</span> (<span id="current-time">0.0</span>s)</label>
+              <input type="range" id="frame-slider" value="0" min="0" max="0" style="width: 100%;">
+            </div>
+            <div class="btn-group">
+              <button id="btn-play" class="btn btn-secondary" style="flex: 1;">Play</button>
+              <button id="btn-stop" class="btn btn-secondary" style="flex: 1;">Stop</button>
+            </div>
+            <div class="form-group" style="margin-top: 8px;">
+              <label>Playback Speed</label>
+              <select id="playback-speed">
+                <option value="0.5">0.5x</option>
+                <option value="1" selected>1x</option>
+                <option value="2">2x</option>
+                <option value="4">4x</option>
+              </select>
+            </div>
+          </div>
         </div>
 
         <div class="form-row">
@@ -576,6 +627,18 @@
       const legendMinEl = document.getElementById('legend-min');
       const legendMaxEl = document.getElementById('legend-max');
       const legendUnitEl = document.getElementById('legend-unit');
+      const timeseriesEnabledCheckbox = document.getElementById('timeseries-enabled');
+      const timeseriesSettingsDiv = document.getElementById('timeseries-settings');
+      const timeseriesControlsDiv = document.getElementById('timeseries-controls');
+      const timeseriesNoDataDiv = document.getElementById('timeseries-no-data');
+      const timeseriesPlayerDiv = document.getElementById('timeseries-player');
+      const frameSlider = document.getElementById('frame-slider');
+      const currentFrameEl = document.getElementById('current-frame');
+      const totalFramesEl = document.getElementById('total-frames');
+      const currentTimeEl = document.getElementById('current-time');
+      const btnPlay = document.getElementById('btn-play');
+      const btnStop = document.getElementById('btn-stop');
+      const playbackSpeedSelect = document.getElementById('playback-speed');
 
       // Default color map bounds per layer
       const defaultColorBounds = {
@@ -583,8 +646,13 @@
         cellCounts: { min: 0, max: 100, unit: '' },
         travelLength: { min: 0, max: 2000, unit: 'm' },
         travelAngle: { min: 0, max: 45, unit: '\u00B0' },
-        heightDifference: { min: 0, max: 1000, unit: 'm' }
+        heightDifference: { min: 0, max: 1000, unit: 'm' },
+        timeseries: { min: 0, max: 5, unit: 'm' }  // Flow height H(x,y,t)
       };
+
+      // Animation state
+      let animationId = null;
+      let isPlaying = false;
 
       // Current color map settings (will be updated per layer)
       let colorMapSettings = JSON.parse(JSON.stringify(defaultColorBounds));
@@ -804,6 +872,201 @@
       // Initialize color map UI
       updateColorMapUI();
 
+      // Time-series checkbox toggle handler
+      timeseriesEnabledCheckbox.addEventListener('change', () => {
+        timeseriesSettingsDiv.style.display = timeseriesEnabledCheckbox.checked ? 'block' : 'none';
+        // Auto-select timeseries layer when enabled
+        if (timeseriesEnabledCheckbox.checked) {
+          layerSelect.value = 'timeseries';
+          updateColorMapUI();
+        }
+      });
+
+      // Layer select change - show/hide time-series controls
+      layerSelect.addEventListener('change', () => {
+        const isTimeseries = layerSelect.value === 'timeseries';
+        timeseriesControlsDiv.style.display = isTimeseries ? 'block' : 'none';
+
+        // Show player or no-data message based on whether data is available
+        const hasData = currentResult?.timeSeries?.data;
+        timeseriesNoDataDiv.style.display = isTimeseries && !hasData ? 'block' : 'none';
+        timeseriesPlayerDiv.style.display = isTimeseries && hasData ? 'block' : 'none';
+
+        if (!isTimeseries) {
+          stopAnimation();
+        }
+        updateColorMapUI();
+      });
+
+      // Frame slider change
+      frameSlider.addEventListener('input', () => {
+        const frame = parseInt(frameSlider.value);
+        currentFrameEl.textContent = frame;
+        // Update time display
+        const interval = currentResult?.timeSeries?.timeInterval || 1.0;
+        currentTimeEl.textContent = (frame * interval).toFixed(1);
+        renderTimeseriesFrame(frame);
+      });
+
+      // Play/Stop buttons
+      btnPlay.addEventListener('click', () => {
+        if (!isPlaying) {
+          startAnimation();
+        }
+      });
+
+      btnStop.addEventListener('click', () => {
+        stopAnimation();
+      });
+
+      // Animation functions
+      function startAnimation() {
+        if (isPlaying || !currentResult?.timeSeries?.data) return;
+        isPlaying = true;
+        btnPlay.textContent = 'Pause';
+
+        const speed = parseFloat(playbackSpeedSelect.value);
+        const interval = currentResult.timeSeries.timeInterval * 1000 / speed; // ms per frame
+
+        function animate() {
+          let frame = parseInt(frameSlider.value);
+          frame++;
+          if (frame >= parseInt(frameSlider.max)) {
+            frame = 0; // Loop back to start
+          }
+          frameSlider.value = frame;
+          currentFrameEl.textContent = frame;
+          // Update time display
+          const timeInterval = currentResult?.timeSeries?.timeInterval || 1.0;
+          currentTimeEl.textContent = (frame * timeInterval).toFixed(1);
+          renderTimeseriesFrame(frame);
+
+          if (isPlaying) {
+            animationId = setTimeout(animate, interval);
+          }
+        }
+        animate();
+      }
+
+      function stopAnimation() {
+        isPlaying = false;
+        btnPlay.textContent = 'Play';
+        if (animationId) {
+          clearTimeout(animationId);
+          animationId = null;
+        }
+      }
+
+      // Render a specific time-series frame
+      function renderTimeseriesFrame(frameIndex) {
+        if (!currentResult?.timeSeries?.data || !currentResult.extent) return;
+
+        const ts = currentResult.timeSeries;
+        const width = ts.width;
+        const height = ts.height;
+        const frameSize = width * height;
+        const frameOffset = frameIndex * frameSize;
+
+        // Get color map bounds for time-series
+        const bounds = colorMapSettings.timeseries;
+        const minVal = bounds.min;
+        const maxVal = bounds.max;
+
+        // Create canvas for this frame
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        const imageData = ctx.createImageData(width, height);
+
+        // Calculate flow height and apply color map
+        const particlesPerCell = currentResult.settings?.numParticlesPerReleaseCell || 64;
+        const referenceHeight = ts.referenceHeight || 1.0;
+
+        // Check if deposition data is available
+        const hasDeposition = ts.depositionData && ts.depositionData.length > 0;
+
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            const i = y * width + x;
+
+            // Get current flow (particles moving at this time)
+            const flowCount = ts.data[frameOffset + i];
+            const flowHeight = (flowCount / particlesPerCell) * referenceHeight;
+
+            // Get pre-computed cumulative deposition up to current frame
+            let cumulativeDeposition = 0;
+            if (hasDeposition && ts.cumulativeDeposition) {
+              cumulativeDeposition = ts.cumulativeDeposition[frameOffset + i];
+            }
+            const depositionHeight = (cumulativeDeposition / particlesPerCell) * referenceHeight;
+
+            // Total snow = flow + cumulative deposition
+            const totalSnow = flowHeight + depositionHeight;
+
+            // Apply color mapping (yellow -> orange -> red for flow, blue tint for deposition)
+            const idx = i * 4;
+            if (totalSnow > 0) {
+              const t = Math.min((totalSnow - minVal) / (maxVal - minVal), 1.0);
+
+              // Blend ratio: how much of total is deposition vs flow
+              const depositionRatio = totalSnow > 0 ? depositionHeight / totalSnow : 0;
+
+              // Flow colors: Yellow (255,255,0) -> Orange (255,136,0) -> Red (255,0,0)
+              // Deposition color: Light blue (100,150,255) for settled snow
+              let r, g, b;
+
+              if (depositionRatio > 0.8) {
+                // Mostly deposition: use blue-white gradient for settled snow
+                const s = Math.min(t * 2, 1.0);
+                r = Math.round(200 + 55 * (1 - s)); // 255 -> 200
+                g = Math.round(220 + 35 * (1 - s)); // 255 -> 220
+                b = 255; // Stay blue-ish
+              } else if (flowHeight > 0) {
+                // Active flow present: use warm colors
+                if (t < 0.5) {
+                  const s = t * 2;
+                  r = 255;
+                  g = Math.round(255 - (255 - 136) * s);
+                  b = Math.round(255 * (1 - s));
+                } else {
+                  const s = (t - 0.5) * 2;
+                  r = 255;
+                  g = Math.round(136 * (1 - s));
+                  b = 0;
+                }
+                // Blend in some blue based on deposition ratio
+                if (depositionRatio > 0) {
+                  r = Math.round(r * (1 - depositionRatio * 0.3) + 180 * depositionRatio * 0.3);
+                  g = Math.round(g * (1 - depositionRatio * 0.3) + 200 * depositionRatio * 0.3);
+                  b = Math.round(b + (255 - b) * depositionRatio * 0.5);
+                }
+              } else {
+                // Only deposition (no current flow): settled snow (white-blue)
+                const s = Math.min(t * 2, 1.0);
+                r = Math.round(220 + 35 * (1 - s));
+                g = Math.round(235 + 20 * (1 - s));
+                b = 255;
+              }
+
+              imageData.data[idx + 0] = r;
+              imageData.data[idx + 1] = g;
+              imageData.data[idx + 2] = b;
+              imageData.data[idx + 3] = 255;
+            } else {
+              // Transparent for no snow
+              imageData.data[idx + 0] = 0;
+              imageData.data[idx + 1] = 0;
+              imageData.data[idx + 2] = 0;
+              imageData.data[idx + 3] = 0;
+            }
+          }
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+        addCanvasToScene(canvas, currentResult.extent);
+      }
+
       // Helper functions
       function setStatus(type, text) {
         statusEl.className = 'status ' + type;
@@ -863,6 +1126,17 @@
             persistence: parseFloat(document.getElementById('persistence').value)
           };
 
+          // Add time-series settings if enabled
+          if (timeseriesEnabledCheckbox.checked) {
+            settings.timeSeries = {
+              enabled: true,
+              maxFrames: parseInt(document.getElementById('timeseries-max-frames').value),
+              timeInterval: parseFloat(document.getElementById('timeseries-interval').value),
+              referenceHeight: parseFloat(document.getElementById('timeseries-ref-height').value)
+            };
+            console.log('[ArcGIS] Time-series enabled:', settings.timeSeries);
+          }
+
           const resolution = parseFloat(document.getElementById('resolution').value);
 
           // Calculate dimensions
@@ -908,8 +1182,14 @@
           console.log('[ArcGIS] Has imageData:', !!currentResult.imageData);
           console.log('[ArcGIS] imageData length:', currentResult.imageData ? currentResult.imageData.length : 0);
           console.log('[ArcGIS] width:', currentResult.width, 'height:', currentResult.height);
+          console.log('[ArcGIS] Has timeSeries:', !!currentResult.timeSeries);
+          if (currentResult.timeSeries) {
+            console.log('[ArcGIS] timeSeries enabled:', currentResult.timeSeries.enabled);
+            console.log('[ArcGIS] timeSeries data length:', currentResult.timeSeries.data?.length);
+          }
 
           currentResult.extent = webMercatorExtent;
+          currentResult.settings = settings; // Store settings for reference
 
           // Display results
           displayResults(currentResult);
@@ -1021,8 +1301,69 @@
 
       // Display results summary
       function displayResults(result) {
+        // Set up time-series controls if data is available
+        if (result.timeSeries && result.timeSeries.enabled && result.timeSeries.data) {
+          const ts = result.timeSeries;
+          // Find actual number of frames with data
+          let actualFrames = ts.maxFrames;
+          // Could scan data to find last non-zero frame, but use maxFrames for now
+
+          frameSlider.max = actualFrames - 1;
+          frameSlider.value = 0;
+          totalFramesEl.textContent = actualFrames;
+          currentFrameEl.textContent = 0;
+          currentTimeEl.textContent = '0.0';
+
+          // Pre-compute cumulative deposition for each frame if deposition data is available
+          // This avoids recalculating cumulative sums for every pixel on every frame
+          console.log('[UI] Time-series deposition data:', ts.depositionData ? ts.depositionData.length : 'undefined');
+          if (ts.depositionData && ts.depositionData.length > 0) {
+            const frameSize = ts.width * ts.height;
+            const numFrames = ts.maxFrames;
+            ts.cumulativeDeposition = new Uint32Array(ts.depositionData.length);
+
+            console.log('[JS] Pre-computing cumulative deposition for', numFrames, 'frames');
+
+            // For each cell, compute running sum across frames
+            for (let i = 0; i < frameSize; i++) {
+              let cumulative = 0;
+              for (let f = 0; f < numFrames; f++) {
+                cumulative += ts.depositionData[f * frameSize + i];
+                ts.cumulativeDeposition[f * frameSize + i] = cumulative;
+              }
+            }
+            console.log('[JS] Cumulative deposition pre-computed');
+          }
+
+          // Show player, hide no-data message
+          timeseriesNoDataDiv.style.display = 'none';
+          timeseriesPlayerDiv.style.display = 'block';
+
+          // Show time-series controls if timeseries layer is selected
+          if (layerSelect.value === 'timeseries') {
+            timeseriesControlsDiv.style.display = 'block';
+          }
+        } else {
+          // Show no-data message, hide player
+          timeseriesNoDataDiv.style.display = layerSelect.value === 'timeseries' ? 'block' : 'none';
+          timeseriesPlayerDiv.style.display = 'none';
+        }
+
         // Handle result with imageData (color-mapped texture readback)
         if (result.success && result.imageData) {
+          let timeseriesInfo = '';
+          if (result.timeSeries && result.timeSeries.enabled) {
+            timeseriesInfo = `
+            <div class="result-item">
+              <span class="result-label">Time-Series</span>
+              <span class="result-value">${result.timeSeries.data ? 'Available' : 'No data'}</span>
+            </div>
+            <div class="result-item">
+              <span class="result-label">Time Frames</span>
+              <span class="result-value">${result.timeSeries.maxFrames} @ ${result.timeSeries.timeInterval}s interval</span>
+            </div>
+            `;
+          }
           resultsContent.innerHTML = `
             <div class="result-item">
               <span class="result-label">Status</span>
@@ -1036,6 +1377,7 @@
               <span class="result-label">Image Data</span>
               <span class="result-value">${result.imageData.length} bytes</span>
             </div>
+            ${timeseriesInfo}
           `;
           return;
         }
@@ -1118,6 +1460,25 @@
         // Get selected layer type
         const layerType = layerSelect.value;
         console.log('[ArcGIS] Selected layer:', layerType);
+
+        // Handle time-series layer
+        if (layerType === 'timeseries') {
+          timeseriesControlsDiv.style.display = 'block';
+          if (currentResult.timeSeries && currentResult.timeSeries.data) {
+            timeseriesNoDataDiv.style.display = 'none';
+            timeseriesPlayerDiv.style.display = 'block';
+            renderTimeseriesFrame(parseInt(frameSlider.value));
+          } else {
+            console.warn('[ArcGIS] Time-series selected but no data available');
+            timeseriesNoDataDiv.style.display = 'block';
+            timeseriesPlayerDiv.style.display = 'none';
+          }
+          return;
+        }
+
+        // Hide time-series controls for other layers
+        timeseriesControlsDiv.style.display = 'none';
+        stopAnimation();
 
         // Handle layers from multi-layer texture readback
         if (currentResult.layers && currentResult.width && currentResult.height) {

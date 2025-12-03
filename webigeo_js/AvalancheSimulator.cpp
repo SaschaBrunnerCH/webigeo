@@ -283,6 +283,46 @@ emscripten::val AvalancheSimulator::get_readback_buffer_info()
     }
     info.set("valid", any_valid);
 
+    // Add time-series buffer info if enabled
+    if (m_trajectories_node && m_trajectories_node->get_settings().timeseries.enabled) {
+        emscripten::val ts_info = emscripten::val::object();
+
+        auto* ts_buffer = static_cast<webgpu::raii::RawBuffer<uint32_t>*>(
+            std::get<webgpu::raii::RawBuffer<uint32_t>*>(
+                m_trajectories_node->output_socket("flow_height_timeseries").get_data()));
+
+        auto* deposition_buffer = static_cast<webgpu::raii::RawBuffer<uint32_t>*>(
+            std::get<webgpu::raii::RawBuffer<uint32_t>*>(
+                m_trajectories_node->output_socket("deposition_timeseries").get_data()));
+
+        if (ts_buffer) {
+            const auto& traj_settings = m_trajectories_node->get_settings();
+            // Get dimensions from one of the readback nodes
+            uint32_t width = m_zdelta_readback_node ? m_zdelta_readback_node->get_width() : 0;
+            uint32_t height = m_zdelta_readback_node ? m_zdelta_readback_node->get_height() : 0;
+            size_t buffer_size = static_cast<size_t>(width) * height * traj_settings.timeseries.max_frames * sizeof(uint32_t);
+
+            ts_info.set("valid", true);
+            ts_info.set("bufferPtr", reinterpret_cast<uintptr_t>(ts_buffer->handle()));
+            ts_info.set("bufferSize", static_cast<double>(buffer_size));
+            ts_info.set("width", width);
+            ts_info.set("height", height);
+            ts_info.set("maxFrames", traj_settings.timeseries.max_frames);
+            ts_info.set("timeInterval", traj_settings.timeseries.time_interval);
+            ts_info.set("referenceHeight", traj_settings.timeseries.reference_height);
+
+            // Add deposition buffer info
+            if (deposition_buffer) {
+                ts_info.set("depositionBufferPtr", reinterpret_cast<uintptr_t>(deposition_buffer->handle()));
+                ts_info.set("depositionBufferSize", static_cast<double>(buffer_size));
+            }
+        } else {
+            ts_info.set("valid", false);
+        }
+
+        info.set("timeSeries", ts_info);
+    }
+
     EM_ASM({ console.log('[C++] get_readback_buffer_info: valid=' + $0); }, any_valid);
 
     return info;
@@ -607,6 +647,26 @@ void AvalancheSimulator::configure_settings(emscripten::val settings)
         traj_settings.runout_flowpy.alpha = glm::radians(settings["maxRunoutAngle"].as<float>());
     }
 
+    // Parse time-series settings
+    if (settings.hasOwnProperty("timeSeries")) {
+        emscripten::val ts = settings["timeSeries"];
+        if (ts.hasOwnProperty("enabled")) {
+            traj_settings.timeseries.enabled = ts["enabled"].as<bool>() ? 1u : 0u;
+        }
+        if (ts.hasOwnProperty("maxFrames")) {
+            traj_settings.timeseries.max_frames = ts["maxFrames"].as<uint32_t>();
+        }
+        if (ts.hasOwnProperty("timeInterval")) {
+            traj_settings.timeseries.time_interval = ts["timeInterval"].as<float>();
+        }
+        if (ts.hasOwnProperty("referenceHeight")) {
+            traj_settings.timeseries.reference_height = ts["referenceHeight"].as<float>();
+        }
+
+        EM_ASM({ console.log('[C++] Time-series settings: enabled=' + $0 + ', maxFrames=' + $1 + ', interval=' + $2); },
+               traj_settings.timeseries.enabled, traj_settings.timeseries.max_frames, traj_settings.timeseries.time_interval);
+    }
+
     EM_ASM({ console.log('[C++] Trajectory settings: particles=' + $0 + ', steps=' + $1 + ', resolution=' + $2); },
            traj_settings.num_paths_per_release_cell, traj_settings.num_steps, traj_settings.resolution_multiplier);
 
@@ -660,6 +720,42 @@ emscripten::val AvalancheSimulator::collect_output()
         emscripten::val memory_view = emscripten::val(emscripten::typed_memory_view(data.size(), data.data()));
         emscripten::val uint8_array = emscripten::val::global("Uint8Array").new_(memory_view);
         output.set("imageData", uint8_array);
+    }
+
+    // Add time-series metadata if enabled
+    if (m_trajectories_node) {
+        const auto& traj_settings = m_trajectories_node->get_settings();
+        if (traj_settings.timeseries.enabled) {
+            emscripten::val timeseries = emscripten::val::object();
+            timeseries.set("enabled", true);
+            timeseries.set("maxFrames", traj_settings.timeseries.max_frames);
+            timeseries.set("timeInterval", traj_settings.timeseries.time_interval);
+            timeseries.set("referenceHeight", traj_settings.timeseries.reference_height);
+            timeseries.set("width", width);
+            timeseries.set("height", height);
+
+            // Get the time-series buffer from the trajectories node
+            // The buffer is available via the output socket "flow_height_timeseries"
+            // For now, we provide buffer info for async readback from JavaScript
+            auto* ts_buffer = static_cast<webgpu::raii::RawBuffer<uint32_t>*>(
+                std::get<webgpu::raii::RawBuffer<uint32_t>*>(
+                    m_trajectories_node->output_socket("flow_height_timeseries").get_data()));
+
+            if (ts_buffer) {
+                size_t buffer_size = static_cast<size_t>(width) * height * traj_settings.timeseries.max_frames * sizeof(uint32_t);
+                timeseries.set("bufferPtr", reinterpret_cast<uintptr_t>(ts_buffer->handle()));
+                timeseries.set("bufferSize", static_cast<double>(buffer_size));
+
+                EM_ASM({ console.log('[C++] Time-series buffer info: frames=' + $0 + ', size=' + $1 + ' bytes'); },
+                       traj_settings.timeseries.max_frames, static_cast<int>(buffer_size));
+            } else {
+                timeseries.set("bufferPtr", 0);
+                timeseries.set("bufferSize", 0);
+                EM_ASM({ console.warn('[C++] Time-series buffer not available'); });
+            }
+
+            output.set("timeSeries", timeseries);
+        }
     }
 
     EM_ASM({ console.log('[C++] All layer data collected'); });
