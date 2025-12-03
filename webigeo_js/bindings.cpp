@@ -103,6 +103,17 @@ void _setReadbackData(uintptr_t simulator_ptr, val data)
     simulator->set_readback_data(data);
 }
 
+void _setColorMapBounds(uintptr_t simulator_ptr, const std::string& layerName, float minValue, float maxValue)
+{
+    auto* simulator = reinterpret_cast<AvalancheSimulator*>(simulator_ptr);
+    simulator->set_color_map_bounds(layerName, minValue, maxValue);
+}
+
+val _getDefaultColorMapBounds()
+{
+    return AvalancheSimulator::get_default_color_map_bounds();
+}
+
 } // namespace webigeo_js
 
 // Embind bindings
@@ -123,6 +134,8 @@ EMSCRIPTEN_BINDINGS(webigeo)
     function("_processEvents", &_processEvents);
     function("_getReadbackBufferInfo", &_getReadbackBufferInfo);
     function("_setReadbackData", &_setReadbackData);
+    function("_setColorMapBounds", &_setColorMapBounds);
+    function("_getDefaultColorMapBounds", &_getDefaultColorMapBounds);
 }
 
 // JavaScript module initialization code
@@ -222,7 +235,7 @@ EM_JS(void, setup_js_helpers, (), {
         };
     };
 
-    // Resolve run promise from C++ - with async buffer readback
+    // Resolve run promise from C++ - with async buffer readback for all layers
     Module._resolveRun = async function(simulatorPtr, result) {
         var callbacks = Module._simulatorCallbacks && Module._simulatorCallbacks[simulatorPtr];
         if (!callbacks) {
@@ -231,61 +244,87 @@ EM_JS(void, setup_js_helpers, (), {
         }
 
         try {
-            // Get readback buffer info from C++
+            // Get readback buffer info from C++ (now contains all 5 layers)
             var bufferInfo = Module._getReadbackBufferInfo(simulatorPtr);
             console.log('[JS] Buffer info:', bufferInfo);
 
-            if (bufferInfo.valid && bufferInfo.bufferPtr && Module.preinitializedWebGPUDevice) {
-                console.log('[JS] Performing async buffer readback...');
+            if (bufferInfo.valid && bufferInfo.layers && Module.preinitializedWebGPUDevice) {
+                console.log('[JS] Performing async buffer readback for all layers...');
 
-                // Get the WebGPU buffer object from the pointer
-                // In emdawnwebgpu, objects are stored via WebGPU.getJsObject()
-                var buffer = null;
-                if (typeof WebGPU !== 'undefined' && WebGPU.getJsObject) {
-                    buffer = WebGPU.getJsObject(bufferInfo.bufferPtr);
-                    console.log('[JS] Got buffer via WebGPU.getJsObject:', buffer);
-                } else {
-                    console.warn('[JS] WebGPU.getJsObject not available');
-                }
+                // Process each layer
+                var layerData = {};
+                var firstWidth = 0;
+                var firstHeight = 0;
 
-                if (buffer) {
-                    // Map the buffer asynchronously
-                    await buffer.mapAsync(GPUMapMode.READ);
-                    console.log('[JS] Buffer mapped successfully');
-
-                    // Get the mapped range
-                    var mappedRange = buffer.getMappedRange();
-                    var srcData = new Uint8Array(mappedRange);
-
-                    // Copy data, removing row padding
-                    var width = bufferInfo.width;
-                    var height = bufferInfo.height;
-                    var paddedBytesPerRow = bufferInfo.paddedBytesPerRow;
-                    var unpaddedBytesPerRow = bufferInfo.unpaddedBytesPerRow;
-
-                    var imageData = new Uint8Array(width * height * 4);
-                    for (var y = 0; y < height; y++) {
-                        var srcOffset = y * paddedBytesPerRow;
-                        var dstOffset = y * unpaddedBytesPerRow;
-                        imageData.set(srcData.subarray(srcOffset, srcOffset + unpaddedBytesPerRow), dstOffset);
+                for (var i = 0; i < bufferInfo.layers.length; i++) {
+                    var layerInfo = bufferInfo.layers[i];
+                    if (!layerInfo.valid) {
+                        console.warn('[JS] Layer', layerInfo.name, 'not valid');
+                        continue;
                     }
 
-                    // Unmap the buffer
-                    buffer.unmap();
+                    console.log('[JS] Processing layer:', layerInfo.name);
 
-                    console.log('[JS] Copied', imageData.length, 'bytes of image data');
+                    // Get the WebGPU buffer object from the pointer
+                    var buffer = null;
+                    if (typeof WebGPU !== 'undefined' && WebGPU.getJsObject) {
+                        buffer = WebGPU.getJsObject(layerInfo.bufferPtr);
+                    }
 
-                    // Send data back to C++
-                    Module._setReadbackData(simulatorPtr, imageData);
+                    if (buffer) {
+                        // Map the buffer asynchronously
+                        await buffer.mapAsync(GPUMapMode.READ);
+                        console.log('[JS] Buffer mapped for layer:', layerInfo.name);
 
-                    // Update result with image data
-                    result.imageData = imageData;
-                    result.width = width;
-                    result.height = height;
-                    console.log('[JS] Set result.imageData (' + imageData.length + ' bytes), width=' + width + ', height=' + height);
-                } else {
-                    console.warn('[JS] Could not get WebGPU buffer from pointer');
+                        // Get the mapped range
+                        var mappedRange = buffer.getMappedRange();
+                        var srcData = new Uint8Array(mappedRange);
+
+                        // Copy data, removing row padding
+                        var width = layerInfo.width;
+                        var height = layerInfo.height;
+                        var paddedBytesPerRow = layerInfo.paddedBytesPerRow;
+                        var unpaddedBytesPerRow = layerInfo.unpaddedBytesPerRow;
+
+                        var imageData = new Uint8Array(width * height * 4);
+                        for (var y = 0; y < height; y++) {
+                            var srcOffset = y * paddedBytesPerRow;
+                            var dstOffset = y * unpaddedBytesPerRow;
+                            imageData.set(srcData.subarray(srcOffset, srcOffset + unpaddedBytesPerRow), dstOffset);
+                        }
+
+                        // Unmap the buffer
+                        buffer.unmap();
+
+                        console.log('[JS] Copied', imageData.length, 'bytes for layer:', layerInfo.name);
+
+                        // Store layer data
+                        layerData[layerInfo.name] = imageData;
+
+                        // Store dimensions from first layer
+                        if (firstWidth === 0) {
+                            firstWidth = width;
+                            firstHeight = height;
+                        }
+                    } else {
+                        console.warn('[JS] Could not get WebGPU buffer for layer:', layerInfo.name);
+                    }
                 }
+
+                // Send all layer data back to C++
+                Module._setReadbackData(simulatorPtr, layerData);
+
+                // Update result with all layers
+                result.layers = layerData;
+                result.width = firstWidth;
+                result.height = firstHeight;
+
+                // For backwards compatibility, set imageData to zdelta
+                if (layerData.zdelta) {
+                    result.imageData = layerData.zdelta;
+                }
+
+                console.log('[JS] All layers processed, width=' + firstWidth + ', height=' + firstHeight);
             } else {
                 console.log('[JS] No valid buffer for readback');
             }

@@ -36,6 +36,7 @@
 // Forward declaration
 namespace webgpu_engine::compute::nodes {
 class ComputeAvalancheTrajectoriesNode;
+class BufferToTextureNode;
 }
 
 namespace webigeo_js {
@@ -106,6 +107,20 @@ public:
      */
     void set_readback_data(emscripten::val data);
 
+    /**
+     * Update color map bounds for a specific layer.
+     * @param layerName Name of the layer (zdelta, cellCounts, travelLength, travelAngle, heightDifference)
+     * @param minValue Minimum value for color mapping
+     * @param maxValue Maximum value for color mapping
+     */
+    void set_color_map_bounds(const std::string& layerName, float minValue, float maxValue);
+
+    /**
+     * Get default color map bounds for all layers.
+     * @return JavaScript object with layer names as keys and {min, max} objects as values
+     */
+    static emscripten::val get_default_color_map_bounds();
+
 public slots:
     void on_run_completed();
     void on_run_failed(webgpu_engine::compute::nodes::GraphRunFailureInfo info);
@@ -153,9 +168,23 @@ private:
 
     // Pointer to trajectories node for output dimensions
     webgpu_engine::compute::nodes::ComputeAvalancheTrajectoriesNode* m_trajectories_node = nullptr;
-    
-    // Pointer to texture readback node for getting image data
-    nodes::TextureReadbackNode* m_texture_readback_node = nullptr;
+
+    // Pointers to texture readback nodes for each layer
+    nodes::TextureReadbackNode* m_zdelta_readback_node = nullptr;
+    nodes::TextureReadbackNode* m_cellCounts_readback_node = nullptr;
+    nodes::TextureReadbackNode* m_travelLength_readback_node = nullptr;
+    nodes::TextureReadbackNode* m_travelAngle_readback_node = nullptr;
+    nodes::TextureReadbackNode* m_heightDifference_readback_node = nullptr;
+
+    // Pointers to buffer-to-texture nodes for color map configuration
+    webgpu_engine::compute::nodes::BufferToTextureNode* m_zdelta_b2t_node = nullptr;
+    webgpu_engine::compute::nodes::BufferToTextureNode* m_cellCounts_b2t_node = nullptr;
+    webgpu_engine::compute::nodes::BufferToTextureNode* m_travelLength_b2t_node = nullptr;
+    webgpu_engine::compute::nodes::BufferToTextureNode* m_travelAngle_b2t_node = nullptr;
+    webgpu_engine::compute::nodes::BufferToTextureNode* m_heightDifference_b2t_node = nullptr;
+
+    // Currently selected layer for readback (0-4)
+    int m_current_layer = 0;
 
     // Promise callbacks
     emscripten::val m_resolve_callback;

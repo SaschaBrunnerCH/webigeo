@@ -28,6 +28,24 @@
 #include <webgpu_engine/compute/nodes/BufferToTextureNode.h>
 #include <webgpu/webgpu_interface.hpp>
 
+// Default color map bounds for each layer
+namespace {
+    struct LayerDefaults {
+        const char* name;
+        float min;
+        float max;
+        const char* unit;
+    };
+
+    const LayerDefaults LAYER_DEFAULTS[] = {
+        { "zdelta", 0.0f, 40.0f, "m/s" },
+        { "cellCounts", 0.0f, 100.0f, "" },
+        { "travelLength", 0.0f, 2000.0f, "m" },
+        { "travelAngle", 0.0f, 45.0f, "°" },
+        { "heightDifference", 0.0f, 1000.0f, "m" },
+    };
+}
+
 // External function from emdawnwebgpu to get the preinitialized device
 extern "C" WGPUDevice emscripten_webgpu_get_device();
 
@@ -178,12 +196,20 @@ void AvalancheSimulator::start_run()
 
     EM_ASM({ console.log('[C++] node_graph->run_sync() returned'); });
 
-    // Try to complete texture readback (uses emscripten_sleep to poll for buffer mapping)
-    if (m_texture_readback_node && m_texture_readback_node->is_readback_pending()) {
-        EM_ASM({ console.log('[C++] Attempting texture readback...'); });
-        bool readback_success = m_texture_readback_node->try_complete_readback();
-        EM_ASM({ console.log('[C++] Texture readback result:', $0); }, readback_success ? 1 : 0);
-    }
+    // Try to complete texture readback for all layers
+    auto try_layer_readback = [](nodes::TextureReadbackNode* node, const char* name) {
+        if (node && node->is_readback_pending()) {
+            EM_ASM({ console.log('[C++] Attempting readback for layer:', UTF8ToString($0)); }, name);
+            bool success = node->try_complete_readback();
+            EM_ASM({ console.log('[C++] Readback result for', UTF8ToString($0), ':', $1); }, name, success ? 1 : 0);
+        }
+    };
+
+    try_layer_readback(m_zdelta_readback_node, "zdelta");
+    try_layer_readback(m_cellCounts_readback_node, "cellCounts");
+    try_layer_readback(m_travelLength_readback_node, "travelLength");
+    try_layer_readback(m_travelAngle_readback_node, "travelAngle");
+    try_layer_readback(m_heightDifference_readback_node, "heightDifference");
 
     // Since run_sync() completes synchronously, call on_run_completed directly
     on_run_completed();
@@ -210,47 +236,80 @@ emscripten::val AvalancheSimulator::get_readback_buffer_info()
 {
     emscripten::val info = emscripten::val::object();
 
-    if (!m_texture_readback_node || !m_texture_readback_node->is_readback_pending()) {
-        info.set("valid", false);
-        return info;
+    // Helper lambda to get buffer info for a layer
+    auto get_layer_info = [](nodes::TextureReadbackNode* node, const char* name) -> emscripten::val {
+        emscripten::val layer_info = emscripten::val::object();
+
+        if (!node || !node->is_readback_pending()) {
+            layer_info.set("valid", false);
+            return layer_info;
+        }
+
+        WGPUBuffer buffer = node->get_staging_buffer();
+        if (!buffer) {
+            layer_info.set("valid", false);
+            return layer_info;
+        }
+
+        layer_info.set("valid", true);
+        layer_info.set("name", std::string(name));
+        layer_info.set("bufferPtr", reinterpret_cast<uintptr_t>(buffer));
+        layer_info.set("bufferSize", static_cast<double>(node->get_buffer_size()));
+        layer_info.set("width", node->get_width());
+        layer_info.set("height", node->get_height());
+        layer_info.set("paddedBytesPerRow", node->get_padded_bytes_per_row());
+        layer_info.set("unpaddedBytesPerRow", node->get_unpadded_bytes_per_row());
+
+        return layer_info;
+    };
+
+    // Create array of layer infos
+    emscripten::val layers = emscripten::val::array();
+    layers.call<void>("push", get_layer_info(m_zdelta_readback_node, "zdelta"));
+    layers.call<void>("push", get_layer_info(m_cellCounts_readback_node, "cellCounts"));
+    layers.call<void>("push", get_layer_info(m_travelLength_readback_node, "travelLength"));
+    layers.call<void>("push", get_layer_info(m_travelAngle_readback_node, "travelAngle"));
+    layers.call<void>("push", get_layer_info(m_heightDifference_readback_node, "heightDifference"));
+
+    info.set("layers", layers);
+
+    // Check if any layer has valid readback pending
+    bool any_valid = false;
+    for (int i = 0; i < 5; i++) {
+        if (layers[i]["valid"].as<bool>()) {
+            any_valid = true;
+            break;
+        }
     }
+    info.set("valid", any_valid);
 
-    WGPUBuffer buffer = m_texture_readback_node->get_staging_buffer();
-    if (!buffer) {
-        info.set("valid", false);
-        return info;
-    }
-
-    info.set("valid", true);
-    // Pass the buffer handle as a pointer value that JavaScript can use with emscripten's WebGPU
-    info.set("bufferPtr", reinterpret_cast<uintptr_t>(buffer));
-    info.set("bufferSize", static_cast<double>(m_texture_readback_node->get_buffer_size()));
-    info.set("width", m_texture_readback_node->get_width());
-    info.set("height", m_texture_readback_node->get_height());
-    info.set("paddedBytesPerRow", m_texture_readback_node->get_padded_bytes_per_row());
-    info.set("unpaddedBytesPerRow", m_texture_readback_node->get_unpadded_bytes_per_row());
-
-    EM_ASM({ console.log('[C++] get_readback_buffer_info: buffer=' + $0 + ', size=' + $1 + ', dims=' + $2 + 'x' + $3); },
-           reinterpret_cast<uintptr_t>(buffer),
-           m_texture_readback_node->get_buffer_size(),
-           m_texture_readback_node->get_width(),
-           m_texture_readback_node->get_height());
+    EM_ASM({ console.log('[C++] get_readback_buffer_info: valid=' + $0); }, any_valid);
 
     return info;
 }
 
 void AvalancheSimulator::set_readback_data(emscripten::val data)
 {
-    if (!m_texture_readback_node) {
-        EM_ASM({ console.error('[C++] set_readback_data: no readback node'); });
-        return;
-    }
+    // data is an object with layer names as keys: { zdelta: Uint8Array, cellCounts: Uint8Array, ... }
+    auto set_layer_data = [&data](nodes::TextureReadbackNode* node, const char* name) {
+        if (!node) return;
 
-    // Convert JavaScript Uint8Array to std::vector
-    std::vector<uint8_t> vec = emscripten::vecFromJSArray<uint8_t>(data);
-    EM_ASM({ console.log('[C++] set_readback_data: received ' + $0 + ' bytes'); }, vec.size());
+        emscripten::val layer_data = data[name];
+        if (layer_data.isUndefined() || layer_data.isNull()) {
+            EM_ASM({ console.warn('[C++] set_readback_data: no data for layer', UTF8ToString($0)); }, name);
+            return;
+        }
 
-    m_texture_readback_node->set_readback_data(std::move(vec));
+        std::vector<uint8_t> vec = emscripten::vecFromJSArray<uint8_t>(layer_data);
+        EM_ASM({ console.log('[C++] set_readback_data:', UTF8ToString($0), $1, 'bytes'); }, name, static_cast<int>(vec.size()));
+        node->set_readback_data(std::move(vec));
+    };
+
+    set_layer_data(m_zdelta_readback_node, "zdelta");
+    set_layer_data(m_cellCounts_readback_node, "cellCounts");
+    set_layer_data(m_travelLength_readback_node, "travelLength");
+    set_layer_data(m_travelAngle_readback_node, "travelAngle");
+    set_layer_data(m_heightDifference_readback_node, "heightDifference");
 }
 
 void AvalancheSimulator::on_run_completed()
@@ -340,25 +399,98 @@ std::unique_ptr<NodeGraph> AvalancheSimulator::create_js_compute_graph()
     ComputeAvalancheTrajectoriesNode* trajectories_ptr = trajectories_node.get();
     node_graph->add_node("compute_avalanche_trajectories_node", std::move(trajectories_node));
 
-    // Buffer to texture node (for color-mapped output)
+    // Common buffer to texture settings
     BufferToTextureNode::BufferToTextureSettings buffer_to_texture_settings {
         .texture_format = WGPUTextureFormat_RGBA8Unorm,
         .texture_usage = static_cast<WGPUTextureUsage>(WGPUTextureUsage_StorageBinding |
                                                        WGPUTextureUsage_TextureBinding |
                                                        WGPUTextureUsage_CopySrc),
+        .color_map_bounds = { 0.0f, 40.0f },        // velocity 0-40 m/s
+        .transparency_map_bounds = { 0.0f, 1.0f },
+        .use_bin_interpolation = true,
+        .use_transparency_buffer = true,
     };
-    auto buffer_to_texture_node = std::make_unique<BufferToTextureNode>(manager, m_device, buffer_to_texture_settings);
-    buffer_to_texture_node->input_socket("raster dimensions").connect(trajectories_ptr->output_socket("raster dimensions"));
-    buffer_to_texture_node->input_socket("storage buffer").connect(trajectories_ptr->output_socket("layer1_zdelta"));
-    buffer_to_texture_node->input_socket("transparency buffer").connect(trajectories_ptr->output_socket("layer2_cellCounts"));
-    BufferToTextureNode* buffer_to_texture_ptr = buffer_to_texture_node.get();
-    node_graph->add_node("buffer_to_texture_node", std::move(buffer_to_texture_node));
 
-    // Texture readback node (for reading color-mapped output back to CPU)
-    auto texture_readback_node = std::make_unique<nodes::TextureReadbackNode>(m_device);
-    texture_readback_node->input_socket("texture").connect(buffer_to_texture_ptr->output_socket("texture"));
-    m_texture_readback_node = texture_readback_node.get();
-    node_graph->add_node("texture_readback_node", std::move(texture_readback_node));
+    // Layer 1: Z-Delta (velocity)
+    auto zdelta_buffer_to_texture = std::make_unique<BufferToTextureNode>(manager, m_device, buffer_to_texture_settings);
+    zdelta_buffer_to_texture->input_socket("raster dimensions").connect(trajectories_ptr->output_socket("raster dimensions"));
+    zdelta_buffer_to_texture->input_socket("storage buffer").connect(trajectories_ptr->output_socket("layer1_zdelta"));
+    zdelta_buffer_to_texture->input_socket("transparency buffer").connect(trajectories_ptr->output_socket("layer2_cellCounts"));
+    m_zdelta_b2t_node = zdelta_buffer_to_texture.get();
+    node_graph->add_node("zdelta_buffer_to_texture", std::move(zdelta_buffer_to_texture));
+
+    auto zdelta_readback = std::make_unique<nodes::TextureReadbackNode>(m_device);
+    zdelta_readback->input_socket("texture").connect(m_zdelta_b2t_node->output_socket("texture"));
+    m_zdelta_readback_node = zdelta_readback.get();
+    node_graph->add_node("zdelta_readback", std::move(zdelta_readback));
+
+    // Layer 2: Cell Counts (probability)
+    BufferToTextureNode::BufferToTextureSettings cellCounts_settings = buffer_to_texture_settings;
+    cellCounts_settings.color_map_bounds = { 0.0f, 100.0f };  // 0-100 particle counts
+    cellCounts_settings.use_transparency_buffer = false;      // Don't use transparency for this layer
+
+    auto cellCounts_buffer_to_texture = std::make_unique<BufferToTextureNode>(manager, m_device, cellCounts_settings);
+    cellCounts_buffer_to_texture->input_socket("raster dimensions").connect(trajectories_ptr->output_socket("raster dimensions"));
+    cellCounts_buffer_to_texture->input_socket("storage buffer").connect(trajectories_ptr->output_socket("layer2_cellCounts"));
+    cellCounts_buffer_to_texture->input_socket("transparency buffer").connect(trajectories_ptr->output_socket("layer2_cellCounts"));
+    m_cellCounts_b2t_node = cellCounts_buffer_to_texture.get();
+    node_graph->add_node("cellCounts_buffer_to_texture", std::move(cellCounts_buffer_to_texture));
+
+    auto cellCounts_readback = std::make_unique<nodes::TextureReadbackNode>(m_device);
+    cellCounts_readback->input_socket("texture").connect(m_cellCounts_b2t_node->output_socket("texture"));
+    m_cellCounts_readback_node = cellCounts_readback.get();
+    node_graph->add_node("cellCounts_readback", std::move(cellCounts_readback));
+
+    // Layer 3: Travel Length
+    BufferToTextureNode::BufferToTextureSettings travelLength_settings = buffer_to_texture_settings;
+    travelLength_settings.color_map_bounds = { 0.0f, 2000.0f };  // 0-2000 meters
+    travelLength_settings.use_transparency_buffer = true;
+
+    auto travelLength_buffer_to_texture = std::make_unique<BufferToTextureNode>(manager, m_device, travelLength_settings);
+    travelLength_buffer_to_texture->input_socket("raster dimensions").connect(trajectories_ptr->output_socket("raster dimensions"));
+    travelLength_buffer_to_texture->input_socket("storage buffer").connect(trajectories_ptr->output_socket("layer3_travelLength"));
+    travelLength_buffer_to_texture->input_socket("transparency buffer").connect(trajectories_ptr->output_socket("layer2_cellCounts"));
+    m_travelLength_b2t_node = travelLength_buffer_to_texture.get();
+    node_graph->add_node("travelLength_buffer_to_texture", std::move(travelLength_buffer_to_texture));
+
+    auto travelLength_readback = std::make_unique<nodes::TextureReadbackNode>(m_device);
+    travelLength_readback->input_socket("texture").connect(m_travelLength_b2t_node->output_socket("texture"));
+    m_travelLength_readback_node = travelLength_readback.get();
+    node_graph->add_node("travelLength_readback", std::move(travelLength_readback));
+
+    // Layer 4: Travel Angle
+    BufferToTextureNode::BufferToTextureSettings travelAngle_settings = buffer_to_texture_settings;
+    travelAngle_settings.color_map_bounds = { 0.0f, 45.0f };  // 0-45 degrees
+    travelAngle_settings.use_transparency_buffer = true;
+
+    auto travelAngle_buffer_to_texture = std::make_unique<BufferToTextureNode>(manager, m_device, travelAngle_settings);
+    travelAngle_buffer_to_texture->input_socket("raster dimensions").connect(trajectories_ptr->output_socket("raster dimensions"));
+    travelAngle_buffer_to_texture->input_socket("storage buffer").connect(trajectories_ptr->output_socket("layer4_travelAngle"));
+    travelAngle_buffer_to_texture->input_socket("transparency buffer").connect(trajectories_ptr->output_socket("layer2_cellCounts"));
+    m_travelAngle_b2t_node = travelAngle_buffer_to_texture.get();
+    node_graph->add_node("travelAngle_buffer_to_texture", std::move(travelAngle_buffer_to_texture));
+
+    auto travelAngle_readback = std::make_unique<nodes::TextureReadbackNode>(m_device);
+    travelAngle_readback->input_socket("texture").connect(m_travelAngle_b2t_node->output_socket("texture"));
+    m_travelAngle_readback_node = travelAngle_readback.get();
+    node_graph->add_node("travelAngle_readback", std::move(travelAngle_readback));
+
+    // Layer 5: Height Difference
+    BufferToTextureNode::BufferToTextureSettings heightDiff_settings = buffer_to_texture_settings;
+    heightDiff_settings.color_map_bounds = { 0.0f, 1000.0f };  // 0-1000 meters
+    heightDiff_settings.use_transparency_buffer = true;
+
+    auto heightDiff_buffer_to_texture = std::make_unique<BufferToTextureNode>(manager, m_device, heightDiff_settings);
+    heightDiff_buffer_to_texture->input_socket("raster dimensions").connect(trajectories_ptr->output_socket("raster dimensions"));
+    heightDiff_buffer_to_texture->input_socket("storage buffer").connect(trajectories_ptr->output_socket("layer5_altitudeDifference"));
+    heightDiff_buffer_to_texture->input_socket("transparency buffer").connect(trajectories_ptr->output_socket("layer2_cellCounts"));
+    m_heightDifference_b2t_node = heightDiff_buffer_to_texture.get();
+    node_graph->add_node("heightDiff_buffer_to_texture", std::move(heightDiff_buffer_to_texture));
+
+    auto heightDiff_readback = std::make_unique<nodes::TextureReadbackNode>(m_device);
+    heightDiff_readback->input_socket("texture").connect(m_heightDifference_b2t_node->output_socket("texture"));
+    m_heightDifference_readback_node = heightDiff_readback.get();
+    node_graph->add_node("heightDiff_readback", std::move(heightDiff_readback));
 
     // Store trajectories node pointer for output collection
     m_trajectories_node = trajectories_ptr;
@@ -488,30 +620,93 @@ emscripten::val AvalancheSimulator::collect_output()
     output.set("success", true);
     output.set("message", emscripten::val("Simulation completed successfully"));
 
-    // Check if we have texture readback data
-    if (m_texture_readback_node && !m_texture_readback_node->get_data().empty()) {
-        const auto& data = m_texture_readback_node->get_data();
-        uint32_t width = m_texture_readback_node->get_width();
-        uint32_t height = m_texture_readback_node->get_height();
+    // Helper lambda to create Uint8Array from readback node
+    auto create_layer_data = [](nodes::TextureReadbackNode* node, const char* layer_name) -> emscripten::val {
+        if (node && !node->get_data().empty()) {
+            const auto& data = node->get_data();
+            emscripten::val memory_view = emscripten::val(emscripten::typed_memory_view(data.size(), data.data()));
+            emscripten::val uint8_array = emscripten::val::global("Uint8Array").new_(memory_view);
+            EM_ASM({ console.log('[C++] Layer data ready:', UTF8ToString($0), $1, 'bytes'); },
+                   layer_name, static_cast<int>(data.size()));
+            return uint8_array;
+        }
+        return emscripten::val::undefined();
+    };
 
-        EM_ASM({ console.log('[C++] Texture readback data available:', $0, 'x', $1, ', size:', $2); },
-               width, height, data.size());
+    // Get dimensions from first available readback node
+    uint32_t width = 0, height = 0;
+    if (m_zdelta_readback_node && !m_zdelta_readback_node->get_data().empty()) {
+        width = m_zdelta_readback_node->get_width();
+        height = m_zdelta_readback_node->get_height();
+    }
 
-        output.set("width", width);
-        output.set("height", height);
+    output.set("width", width);
+    output.set("height", height);
 
-        // Create a Uint8Array from the data
-        // Use typed_memory_view to create a view, then copy to a new Uint8Array
+    EM_ASM({ console.log('[C++] Output dimensions:', $0, 'x', $1); }, width, height);
+
+    // Create layers object with all 5 layer textures
+    emscripten::val layers = emscripten::val::object();
+    layers.set("zdelta", create_layer_data(m_zdelta_readback_node, "zdelta"));
+    layers.set("cellCounts", create_layer_data(m_cellCounts_readback_node, "cellCounts"));
+    layers.set("travelLength", create_layer_data(m_travelLength_readback_node, "travelLength"));
+    layers.set("travelAngle", create_layer_data(m_travelAngle_readback_node, "travelAngle"));
+    layers.set("heightDifference", create_layer_data(m_heightDifference_readback_node, "heightDifference"));
+    output.set("layers", layers);
+
+    // For backwards compatibility, also set imageData to zdelta layer
+    if (m_zdelta_readback_node && !m_zdelta_readback_node->get_data().empty()) {
+        const auto& data = m_zdelta_readback_node->get_data();
         emscripten::val memory_view = emscripten::val(emscripten::typed_memory_view(data.size(), data.data()));
         emscripten::val uint8_array = emscripten::val::global("Uint8Array").new_(memory_view);
         output.set("imageData", uint8_array);
-
-        EM_ASM({ console.log('[C++] Image data set in output'); });
-    } else {
-        EM_ASM({ console.log('[C++] No texture readback data available'); });
     }
 
+    EM_ASM({ console.log('[C++] All layer data collected'); });
+
     return output;
+}
+
+void AvalancheSimulator::set_color_map_bounds(const std::string& layerName, float minValue, float maxValue)
+{
+    EM_ASM({ console.log('[C++] set_color_map_bounds:', UTF8ToString($0), $1, $2); },
+           layerName.c_str(), minValue, maxValue);
+
+    BufferToTextureNode* node = nullptr;
+
+    if (layerName == "zdelta") {
+        node = m_zdelta_b2t_node;
+    } else if (layerName == "cellCounts") {
+        node = m_cellCounts_b2t_node;
+    } else if (layerName == "travelLength") {
+        node = m_travelLength_b2t_node;
+    } else if (layerName == "travelAngle") {
+        node = m_travelAngle_b2t_node;
+    } else if (layerName == "heightDifference") {
+        node = m_heightDifference_b2t_node;
+    }
+
+    if (node) {
+        node->settings().color_map_bounds = { minValue, maxValue };
+        EM_ASM({ console.log('[C++] Updated color map bounds for layer:', UTF8ToString($0)); }, layerName.c_str());
+    } else {
+        EM_ASM({ console.warn('[C++] Unknown layer name:', UTF8ToString($0)); }, layerName.c_str());
+    }
+}
+
+emscripten::val AvalancheSimulator::get_default_color_map_bounds()
+{
+    emscripten::val bounds = emscripten::val::object();
+
+    for (const auto& layer : LAYER_DEFAULTS) {
+        emscripten::val layerBounds = emscripten::val::object();
+        layerBounds.set("min", layer.min);
+        layerBounds.set("max", layer.max);
+        layerBounds.set("unit", std::string(layer.unit));
+        bounds.set(std::string(layer.name), layerBounds);
+    }
+
+    return bounds;
 }
 
 } // namespace webigeo_js
