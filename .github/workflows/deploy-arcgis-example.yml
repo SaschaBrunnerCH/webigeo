@@ -1,0 +1,50 @@
+name: "Deploy ArcGIS Example"
+
+on:
+  push:
+    branches: [ "add-timeseries" ]
+    paths:
+      - 'webigeo_js/js-example-arcgis/**'
+      - '.github/workflows/deploy-arcgis-example.yml'
+  workflow_dispatch:  # Allow manual trigger
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: deploy-arcgis-example-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Prepare deployment folder
+      run: |
+        mkdir -p $GITHUB_WORKSPACE/github_page
+        cp -r $GITHUB_WORKSPACE/webigeo_js/js-example-arcgis/* $GITHUB_WORKSPACE/github_page/
+
+        echo "Contents of deployment folder:"
+        ls -la $GITHUB_WORKSPACE/github_page/
+
+    - name: Create Pages artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: ${{ github.workspace }}/github_page
+
+    - name: Setup Pages
+      uses: actions/configure-pages@v4
+
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
