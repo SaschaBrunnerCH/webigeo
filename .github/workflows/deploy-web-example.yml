@@ -5,7 +5,7 @@ on:
     branches: ["add-timeseries"]
     paths:
       - "webigeo_js/js-example-arcgis/**"
-      - ".github/workflows/deploy-arcgis-example.yml"
+      - ".github/workflows/deploy-web-example.yml"
   workflow_dispatch:
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
