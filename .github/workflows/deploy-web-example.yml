@@ -2,7 +2,7 @@ name: "Deploy ArcGIS Example"
 
 on:
   push:
-    branches: ["add-timeseries"]
+    branches: ["feature/add-timeseries"]
     paths:
       - "webigeo_js/js-example-arcgis/**"
       - ".github/workflows/deploy-web-example.yml"
