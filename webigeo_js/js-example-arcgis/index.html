@@ -1,1370 +1,1688 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>weBIGeo Avalanche Simulation - ArcGIS JS API 3D</title>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>
+      WEBGPU - WebAssembly Avalanche Simulation - (NOT VALIDATED: use at your
+      own risk)
+    </title>
 
-  <!-- ArcGIS JS API -->
-  <link rel="stylesheet" href="https://js.arcgis.com/4.34/esri/themes/light/main.css">
-  <script src="https://js.arcgis.com/4.34/"></script>
+    <!-- ArcGIS JS API -->
+    <link
+      rel="stylesheet"
+      href="https://js.arcgis.com/4.34/esri/themes/light/main.css"
+    />
+    <script src="https://js.arcgis.com/4.34/"></script>
 
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
 
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-    }
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+      }
 
-    /* Header */
-    .header {
-      background: linear-gradient(135deg, #1a5276 0%, #2980b9 100%);
-      color: white;
-      padding: 12px 20px;
-      display: flex;
-      align-items: center;
-      gap: 15px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-    }
+      /* Header */
+      .header {
+        background: linear-gradient(135deg, #1a5276 0%, #2980b9 100%);
+        color: white;
+        padding: 12px 20px;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+      }
 
-    .header h1 {
-      font-size: 1.4em;
-      font-weight: 500;
-    }
+      .header h1 {
+        font-size: 1.4em;
+        font-weight: 500;
+      }
 
-    .header .status {
-      margin-left: auto;
-      padding: 6px 12px;
-      border-radius: 4px;
-      font-size: 0.9em;
-      background: rgba(255,255,255,0.2);
-    }
+      .header .status {
+        margin-left: auto;
+        padding: 6px 12px;
+        border-radius: 4px;
+        font-size: 0.9em;
+        background: rgba(255, 255, 255, 0.2);
+      }
 
-    .header .status.ready {
-      background: #27ae60;
-    }
+      .header .status.ready {
+        background: #27ae60;
+      }
 
-    .header .status.error {
-      background: #c0392b;
-    }
+      .header .status.error {
+        background: #c0392b;
+      }
 
-    .header .status.loading {
-      background: #f39c12;
-    }
+      .header .status.loading {
+        background: #f39c12;
+      }
 
-    /* Main content */
-    .main-content {
-      display: flex;
-      flex: 1;
-      overflow: hidden;
-    }
+      /* Main content */
+      .main-content {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+      }
 
-    /* Sidebar */
-    .sidebar {
-      width: 320px;
-      background: #f8f9fa;
-      border-right: 1px solid #dee2e6;
-      display: flex;
-      flex-direction: column;
-      overflow-y: auto;
-    }
+      /* Sidebar */
+      .sidebar {
+        width: 320px;
+        background: #f8f9fa;
+        border-right: 1px solid #dee2e6;
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+      }
 
-    .panel {
-      padding: 15px;
-      border-bottom: 1px solid #dee2e6;
-    }
+      .panel {
+        padding: 15px;
+        border-bottom: 1px solid #dee2e6;
+      }
 
-    .panel h3 {
-      font-size: 0.95em;
-      color: #495057;
-      margin-bottom: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
+      .panel h3 {
+        font-size: 0.95em;
+        color: #495057;
+        margin-bottom: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
 
-    .form-group {
-      margin-bottom: 12px;
-    }
+      .form-group {
+        margin-bottom: 12px;
+      }
 
-    .form-group label {
-      display: block;
-      font-size: 0.85em;
-      color: #6c757d;
-      margin-bottom: 4px;
-    }
+      .form-group label {
+        display: block;
+        font-size: 0.85em;
+        color: #6c757d;
+        margin-bottom: 4px;
+      }
 
-    .form-group input[type="number"],
-    .form-group input[type="text"],
-    .form-group select {
-      width: 100%;
-      padding: 8px 10px;
-      border: 1px solid #ced4da;
-      border-radius: 4px;
-      font-size: 0.9em;
-    }
+      .form-group input[type="number"],
+      .form-group input[type="text"],
+      .form-group select {
+        width: 100%;
+        padding: 8px 10px;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        font-size: 0.9em;
+      }
 
-    .form-group input:focus,
-    .form-group select:focus {
-      outline: none;
-      border-color: #2980b9;
-      box-shadow: 0 0 0 2px rgba(41,128,185,0.2);
-    }
+      .form-group input:focus,
+      .form-group select:focus {
+        outline: none;
+        border-color: #2980b9;
+        box-shadow: 0 0 0 2px rgba(41, 128, 185, 0.2);
+      }
 
-    .form-row {
-      display: flex;
-      gap: 10px;
-    }
+      .form-row {
+        display: flex;
+        gap: 10px;
+      }
 
-    .form-row .form-group {
-      flex: 1;
-    }
+      .form-row .form-group {
+        flex: 1;
+      }
 
-    /* Buttons */
-    .btn {
-      padding: 10px 16px;
-      border: none;
-      border-radius: 4px;
-      font-size: 0.9em;
-      cursor: pointer;
-      transition: all 0.2s;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
+      /* Buttons */
+      .btn {
+        padding: 10px 16px;
+        border: none;
+        border-radius: 4px;
+        font-size: 0.9em;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
 
-    .btn-primary {
-      background: #2980b9;
-      color: white;
-    }
+      .btn-primary {
+        background: #2980b9;
+        color: white;
+      }
 
-    .btn-primary:hover:not(:disabled) {
-      background: #1a5276;
-    }
+      .btn-primary:hover:not(:disabled) {
+        background: #1a5276;
+      }
 
-    .btn-secondary {
-      background: #6c757d;
-      color: white;
-    }
+      .btn-secondary {
+        background: #6c757d;
+        color: white;
+      }
 
-    .btn-secondary:hover:not(:disabled) {
-      background: #545b62;
-    }
+      .btn-secondary:hover:not(:disabled) {
+        background: #545b62;
+      }
 
-    .btn-danger {
-      background: #c0392b;
-      color: white;
-    }
+      .btn-danger {
+        background: #c0392b;
+        color: white;
+      }
 
-    .btn-danger:hover:not(:disabled) {
-      background: #96281b;
-    }
+      .btn-danger:hover:not(:disabled) {
+        background: #96281b;
+      }
 
-    .btn-release {
-      background: #e74c3c;
-      color: white;
-    }
+      .btn-release {
+        background: #e74c3c;
+        color: white;
+      }
 
-    .btn-release:hover:not(:disabled) {
-      background: #c0392b;
-    }
+      .btn-release:hover:not(:disabled) {
+        background: #c0392b;
+      }
 
-    .btn-area {
-      background: #3498db;
-      color: white;
-    }
+      .btn-area {
+        background: #3498db;
+        color: white;
+      }
 
-    .btn-area:hover:not(:disabled) {
-      background: #2980b9;
-    }
+      .btn-area:hover:not(:disabled) {
+        background: #2980b9;
+      }
 
-    .btn:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
+      .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
 
-    .btn-block {
-      width: 100%;
-      justify-content: center;
-    }
+      .btn-block {
+        width: 100%;
+        justify-content: center;
+      }
 
-    .btn-group {
-      display: flex;
-      gap: 8px;
-      margin-top: 12px;
-    }
+      .btn-group {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+      }
 
-    .btn-group-vertical {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      margin-top: 12px;
-    }
+      .btn-group-vertical {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 12px;
+      }
 
-    /* Scene container */
-    #viewDiv {
-      flex: 1;
-      position: relative;
-    }
+      /* Scene container */
+      #viewDiv {
+        flex: 1;
+        position: relative;
+      }
 
-    /* Results panel */
-    .results-panel {
-      background: white;
-    }
+      /* Results panel */
+      .results-panel {
+        background: white;
+      }
 
-    .result-item {
-      display: flex;
-      justify-content: space-between;
-      padding: 8px 0;
-      border-bottom: 1px solid #eee;
-      font-size: 0.85em;
-    }
+      .result-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px solid #eee;
+        font-size: 0.85em;
+      }
 
-    .result-item:last-child {
-      border-bottom: none;
-    }
+      .result-item:last-child {
+        border-bottom: none;
+      }
 
-    .result-label {
-      color: #6c757d;
-    }
+      .result-label {
+        color: #6c757d;
+      }
 
-    .result-value {
-      font-weight: 500;
-      color: #212529;
-    }
+      .result-value {
+        font-weight: 500;
+        color: #212529;
+      }
 
-    /* Legend */
-    .legend {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 10px;
-    }
+      /* Legend */
+      .legend {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 10px;
+      }
 
-    .legend-gradient {
-      width: 100%;
-      height: 12px;
-      border-radius: 2px;
-      background: linear-gradient(to right, #ffff00, #ff8800, #ff0000);
-    }
+      .legend-gradient {
+        width: 100%;
+        height: 12px;
+        border-radius: 2px;
+        background: linear-gradient(to right, #ffff00, #ff8800, #ff0000);
+      }
 
-    .legend-labels {
-      display: flex;
-      justify-content: space-between;
-      font-size: 0.75em;
-      color: #6c757d;
-      margin-top: 4px;
-    }
+      .legend-labels {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.75em;
+        color: #6c757d;
+        margin-top: 4px;
+      }
 
-    .legend-labels #legend-unit {
-      position: absolute;
-      left: 50%;
-      transform: translateX(-50%);
-    }
+      .legend-labels #legend-unit {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+      }
 
-    .legend {
-      position: relative;
-    }
+      .legend {
+        position: relative;
+      }
 
-    /* Instructions */
-    .instructions {
-      background: #e8f4fd;
-      border-left: 3px solid #2980b9;
-      padding: 10px 12px;
-      font-size: 0.85em;
-      color: #1a5276;
-      margin-bottom: 12px;
-    }
+      /* Instructions */
+      .instructions {
+        background: #e8f4fd;
+        border-left: 3px solid #2980b9;
+        padding: 10px 12px;
+        font-size: 0.85em;
+        color: #1a5276;
+        margin-bottom: 12px;
+      }
 
-    /* Status indicators */
-    .draw-status {
-      display: flex;
-      gap: 12px;
-      margin-top: 12px;
-      padding: 10px;
-      background: #f1f3f4;
-      border-radius: 4px;
-      font-size: 0.85em;
-    }
+      /* Status indicators */
+      .draw-status {
+        display: flex;
+        gap: 12px;
+        margin-top: 12px;
+        padding: 10px;
+        background: #f1f3f4;
+        border-radius: 4px;
+        font-size: 0.85em;
+      }
 
-    .draw-status-item {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
+      .draw-status-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
 
-    .draw-status-item .indicator {
-      width: 12px;
-      height: 12px;
-      border-radius: 2px;
-    }
+      .draw-status-item .indicator {
+        width: 12px;
+        height: 12px;
+        border-radius: 2px;
+      }
 
-    .draw-status-item .indicator.area {
-      background: rgba(52, 152, 219, 0.6);
-      border: 2px solid #3498db;
-    }
+      .draw-status-item .indicator.area {
+        background: rgba(52, 152, 219, 0.6);
+        border: 2px solid #3498db;
+      }
 
-    .draw-status-item .indicator.release {
-      background: rgba(231, 76, 60, 0.6);
-      border: 2px solid #e74c3c;
-    }
+      .draw-status-item .indicator.release {
+        background: rgba(231, 76, 60, 0.6);
+        border: 2px solid #e74c3c;
+      }
 
-    .draw-status-item .count {
-      font-weight: 500;
-    }
+      .draw-status-item .count {
+        font-weight: 500;
+      }
 
-    /* Loading overlay */
-    .loading-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(255,255,255,0.8);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-    }
+      /* Loading overlay */
+      .loading-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(255, 255, 255, 0.8);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+      }
 
-    .loading-overlay.hidden {
-      display: none;
-    }
+      .loading-overlay.hidden {
+        display: none;
+      }
 
-    .spinner {
-      width: 40px;
-      height: 40px;
-      border: 4px solid #dee2e6;
-      border-top-color: #2980b9;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
+      .spinner {
+        width: 40px;
+        height: 40px;
+        border: 4px solid #dee2e6;
+        border-top-color: #2980b9;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
 
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
 
-    .loading-text {
-      margin-top: 12px;
-      color: #495057;
-      font-size: 0.9em;
-    }
+      .loading-text {
+        margin-top: 12px;
+        color: #495057;
+        font-size: 0.9em;
+      }
 
-    /* Timings */
-    .timings-list {
-      font-size: 0.8em;
-      max-height: 150px;
-      overflow-y: auto;
-    }
+      /* Timings */
+      .timings-list {
+        font-size: 0.8em;
+        max-height: 150px;
+        overflow-y: auto;
+      }
 
-    .timing-item {
-      display: flex;
-      justify-content: space-between;
-      padding: 4px 0;
-      color: #6c757d;
-    }
-  </style>
-</head>
-<body>
-  <!-- Header -->
-  <div class="header">
-    <h1>weBIGeo Avalanche Simulation 3D</h1>
-    <div id="status" class="status loading">Initializing...</div>
-  </div>
+      .timing-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 4px 0;
+        color: #6c757d;
+      }
 
-  <!-- Main content -->
-  <div class="main-content">
-    <!-- Sidebar -->
-    <div class="sidebar">
-      <!-- Drawing panel -->
-      <div class="panel">
-        <h3>Drawing Tools</h3>
-        <div class="instructions">
-          1. Draw a <strong>Calculation Area</strong> (blue) to define simulation bounds<br>
-          2. Draw <strong>Release Area(s)</strong> (red) where avalanches start<br>
-          3. Click "Run Simulation"
-        </div>
-        <div class="btn-group-vertical">
-          <button id="btn-draw-area" class="btn btn-area" disabled>
-            <span>Draw Calculation Area</span>
-          </button>
-          <button id="btn-draw-release" class="btn btn-release" disabled>
-            <span>Draw Release Area</span>
-          </button>
-        </div>
-        <div class="btn-group">
-          <button id="btn-clear" class="btn btn-secondary" disabled>
-            <span>Clear All</span>
-          </button>
-        </div>
-        <div class="draw-status">
-          <div class="draw-status-item">
-            <div class="indicator area"></div>
-            <span>Area: <span id="area-count" class="count">0</span></span>
+      /* Quote banner */
+      .quote-banner {
+        position: fixed;
+        top: 70px;
+        right: 20px;
+        background: linear-gradient(
+          135deg,
+          rgba(26, 82, 118, 0.95) 0%,
+          rgba(41, 128, 185, 0.95) 100%
+        );
+        color: white;
+        padding: 12px 18px;
+        border-radius: 8px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        max-width: 280px;
+        z-index: 1000;
+        font-family: Georgia, "Times New Roman", serif;
+        animation: slideIn 0.5s ease-out;
+        cursor: default;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      .quote-banner:hover {
+        transform: translateY(3px);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+      }
+
+      .quote-banner .quote-text {
+        font-style: italic;
+        font-size: 0.95em;
+        line-height: 1.4;
+        margin-bottom: 8px;
+      }
+
+      .quote-banner .quote-author {
+        font-size: 0.8em;
+        text-align: right;
+        opacity: 0.9;
+        font-style: normal;
+      }
+
+      .quote-banner .quote-icon {
+        position: absolute;
+        top: -8px;
+        left: 10px;
+        font-size: 2em;
+        opacity: 0.3;
+      }
+
+      @keyframes slideIn {
+        from {
+          opacity: 0;
+          transform: translateX(50px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Header -->
+    <div class="header">
+      <h1>
+        WEBGPU - WebAssembly Avalanche Simulation - (NOT VALIDATED: use at your
+        own risk)
+      </h1>
+      <div id="status" class="status loading">Initializing...</div>
+    </div>
+
+    <!-- Main content -->
+    <div class="main-content">
+      <!-- Sidebar -->
+      <div class="sidebar">
+        <!-- Drawing panel -->
+        <div class="panel">
+          <h3>Drawing Tools</h3>
+          <div class="instructions">
+            1. Draw a <strong>Calculation Area</strong> (blue) to define
+            simulation bounds<br />
+            2. Draw <strong>Release Area(s)</strong> (red) where avalanches
+            start<br />
+            3. Click "Run Simulation"
           </div>
-          <div class="draw-status-item">
-            <div class="indicator release"></div>
-            <span>Release: <span id="release-count" class="count">0</span></span>
+          <div class="btn-group-vertical">
+            <button id="btn-draw-area" class="btn btn-area" disabled>
+              <span>Draw Calculation Area</span>
+            </button>
+            <button id="btn-draw-release" class="btn btn-release" disabled>
+              <span>Draw Release Area</span>
+            </button>
           </div>
-        </div>
-      </div>
-
-      <!-- Settings panel -->
-      <div class="panel">
-        <h3>Simulation Settings</h3>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label>Particles per Cell</label>
-            <input type="number" id="particles" value="64" min="1" max="1024">
+          <div class="btn-group">
+            <button id="btn-clear" class="btn btn-secondary" disabled>
+              <span>Clear All</span>
+            </button>
           </div>
-          <div class="form-group">
-            <label>Simulation Steps</label>
-            <input type="number" id="steps" value="1000" min="100" max="10000">
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label>Max Deviation (deg)</label>
-            <input type="number" id="deviation" value="25" min="0" max="90" step="1">
-          </div>
-          <div class="form-group">
-            <label>Max Runout Angle (deg)</label>
-            <input type="number" id="runout" value="25" min="0" max="45" step="1">
+          <div class="draw-status">
+            <div class="draw-status-item">
+              <div class="indicator area"></div>
+              <span>Area: <span id="area-count" class="count">0</span></span>
+            </div>
+            <div class="draw-status-item">
+              <div class="indicator release"></div>
+              <span
+                >Release: <span id="release-count" class="count">0</span></span
+              >
+            </div>
           </div>
         </div>
 
-        <div class="form-row">
-          <div class="form-group">
-            <label>Persistence</label>
-            <input type="number" id="persistence" value="0.9" min="0" max="1" step="0.1">
-          </div>
-          <div class="form-group">
-            <label>Resolution (m/px)</label>
-            <input type="number" id="resolution" value="10" min="1" max="100">
-          </div>
-        </div>
+        <!-- Settings panel -->
+        <div class="panel">
+          <h3>Simulation Settings</h3>
 
-        <div class="form-group" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #dee2e6;">
-          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-            <input type="checkbox" id="timeseries-enabled" style="width: auto;">
-            <span>Enable Time-Series H(x,y,t)</span>
-          </label>
-        </div>
-
-        <div id="timeseries-settings" style="display: none;">
           <div class="form-row">
             <div class="form-group">
-              <label>Max Frames</label>
-              <input type="number" id="timeseries-max-frames" value="100" min="10" max="500">
+              <label>Particles per Cell</label>
+              <input
+                type="number"
+                id="particles"
+                value="64"
+                min="1"
+                max="1024"
+              />
             </div>
             <div class="form-group">
-              <label>Time Interval (s)</label>
-              <input type="number" id="timeseries-interval" value="1.0" min="0.1" max="10" step="0.1">
+              <label>Simulation Steps</label>
+              <input
+                type="number"
+                id="steps"
+                value="1000"
+                min="100"
+                max="10000"
+              />
             </div>
           </div>
-          <div class="form-group">
-            <label>Reference Height (m)</label>
-            <input type="number" id="timeseries-ref-height" value="1.0" min="0.1" max="10" step="0.1">
-          </div>
-        </div>
 
-        <button id="btn-run" class="btn btn-primary btn-block" disabled>
-          Run Simulation
-        </button>
-      </div>
-
-      <!-- Results panel -->
-      <div class="panel results-panel">
-        <h3>Results</h3>
-        <div id="results-content">
-          <p style="color: #6c757d; font-size: 0.85em;">No simulation run yet.</p>
-        </div>
-      </div>
-
-      <!-- Layer controls -->
-      <div class="panel">
-        <h3>Output Layer</h3>
-        <div class="form-group">
-          <label>Display</label>
-          <select id="layer-select">
-            <option value="zdelta">Z-Delta (Velocity)</option>
-            <option value="cellCounts">Cell Counts (Probability)</option>
-            <option value="travelLength">Travel Length</option>
-            <option value="travelAngle">Travel Angle</option>
-            <option value="heightDifference">Height Difference</option>
-            <option value="timeseries">Flow Height H(x,y,t)</option>
-          </select>
-        </div>
-
-        <!-- Time-series animation controls (hidden by default) -->
-        <div id="timeseries-controls" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid #dee2e6;">
-          <div id="timeseries-no-data" style="color: #6c757d; font-size: 0.85em; padding: 8px; background: #f1f3f4; border-radius: 4px;">
-            Run simulation with time-series enabled to view animation.
-          </div>
-          <div id="timeseries-player" style="display: none;">
+          <div class="form-row">
             <div class="form-group">
-              <label>Time Frame: <span id="current-frame">0</span> / <span id="total-frames">0</span> (<span id="current-time">0.0</span>s)</label>
-              <input type="range" id="frame-slider" value="0" min="0" max="0" style="width: 100%;">
+              <label>Max Deviation (deg)</label>
+              <input
+                type="number"
+                id="deviation"
+                value="25"
+                min="0"
+                max="90"
+                step="1"
+              />
             </div>
-            <div class="btn-group">
-              <button id="btn-play" class="btn btn-secondary" style="flex: 1;">Play</button>
-              <button id="btn-stop" class="btn btn-secondary" style="flex: 1;">Stop</button>
+            <div class="form-group">
+              <label>Max Runout Angle (deg)</label>
+              <input
+                type="number"
+                id="runout"
+                value="25"
+                min="0"
+                max="45"
+                step="1"
+              />
             </div>
-            <div class="form-group" style="margin-top: 8px;">
-              <label>Playback Speed</label>
-              <select id="playback-speed">
-                <option value="0.5">0.5x</option>
-                <option value="1" selected>1x</option>
-                <option value="2">2x</option>
-                <option value="4">4x</option>
-              </select>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Persistence</label>
+              <input
+                type="number"
+                id="persistence"
+                value="0.9"
+                min="0"
+                max="1"
+                step="0.1"
+              />
             </div>
+            <div class="form-group">
+              <label>Resolution (m/px)</label>
+              <input
+                type="number"
+                id="resolution"
+                value="10"
+                min="1"
+                max="100"
+              />
+            </div>
+          </div>
+
+          <div
+            class="form-group"
+            style="
+              margin-top: 12px;
+              padding-top: 12px;
+              border-top: 1px solid #dee2e6;
+            "
+          >
+            <label
+              style="
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                cursor: pointer;
+              "
+            >
+              <input
+                type="checkbox"
+                id="timeseries-enabled"
+                style="width: auto"
+              />
+              <span>Enable Time-Series H(x,y,t)</span>
+            </label>
+          </div>
+
+          <div id="timeseries-settings" style="display: none">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Max Frames</label>
+                <input
+                  type="number"
+                  id="timeseries-max-frames"
+                  value="100"
+                  min="10"
+                  max="500"
+                />
+              </div>
+              <div class="form-group">
+                <label>Time Interval (s)</label>
+                <input
+                  type="number"
+                  id="timeseries-interval"
+                  value="1.0"
+                  min="0.1"
+                  max="10"
+                  step="0.1"
+                />
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Reference Height (m)</label>
+              <input
+                type="number"
+                id="timeseries-ref-height"
+                value="1.0"
+                min="0.1"
+                max="10"
+                step="0.1"
+              />
+            </div>
+          </div>
+
+          <button id="btn-run" class="btn btn-primary btn-block" disabled>
+            Run Simulation
+          </button>
+        </div>
+
+        <!-- Results panel -->
+        <div class="panel results-panel">
+          <h3>Results</h3>
+          <div id="results-content">
+            <p style="color: #6c757d; font-size: 0.85em">
+              No simulation run yet.
+            </p>
           </div>
         </div>
 
-        <div class="form-row">
+        <!-- Layer controls -->
+        <div class="panel">
+          <h3>Output Layer</h3>
           <div class="form-group">
-            <label>Color Min</label>
-            <input type="number" id="color-min" value="0" min="0" step="1">
+            <label>Display</label>
+            <select id="layer-select">
+              <option value="zdelta">Z-Delta (Velocity)</option>
+              <option value="cellCounts">Cell Counts (Probability)</option>
+              <option value="travelLength">Travel Length</option>
+              <option value="travelAngle">Travel Angle</option>
+              <option value="heightDifference">Height Difference</option>
+              <option value="timeseries">Flow Height H(x,y,t)</option>
+            </select>
           </div>
-          <div class="form-group">
-            <label>Color Max</label>
-            <input type="number" id="color-max" value="40" min="1" step="1">
-          </div>
-        </div>
 
-        <div class="form-group">
-          <label>Opacity</label>
-          <input type="range" id="opacity" value="70" min="0" max="100">
-        </div>
-        <div class="form-group">
-          <label>Elevation Offset (m)</label>
-          <input type="number" id="elevation-offset" value="5" min="0" max="100" step="1">
-        </div>
-        <div class="legend">
-          <div style="width: 100%;">
-            <div class="legend-gradient"></div>
-            <div class="legend-labels">
-              <span id="legend-min">0</span>
-              <span id="legend-unit"></span>
-              <span id="legend-max">40</span>
+          <!-- Time-series animation controls (hidden by default) -->
+          <div
+            id="timeseries-controls"
+            style="
+              display: none;
+              margin-top: 12px;
+              padding-top: 12px;
+              border-top: 1px solid #dee2e6;
+            "
+          >
+            <div
+              id="timeseries-no-data"
+              style="
+                color: #6c757d;
+                font-size: 0.85em;
+                padding: 8px;
+                background: #f1f3f4;
+                border-radius: 4px;
+              "
+            >
+              Run simulation with time-series enabled to view animation.
+            </div>
+            <div id="timeseries-player" style="display: none">
+              <div class="form-group">
+                <label
+                  >Time Frame: <span id="current-frame">0</span> /
+                  <span id="total-frames">0</span> (<span id="current-time"
+                    >0.0</span
+                  >s)</label
+                >
+                <input
+                  type="range"
+                  id="frame-slider"
+                  value="0"
+                  min="0"
+                  max="0"
+                  style="width: 100%"
+                />
+              </div>
+              <div class="btn-group">
+                <button id="btn-play" class="btn btn-secondary" style="flex: 1">
+                  Play
+                </button>
+                <button id="btn-stop" class="btn btn-secondary" style="flex: 1">
+                  Stop
+                </button>
+              </div>
+              <div class="form-group" style="margin-top: 8px">
+                <label>Playback Speed</label>
+                <select id="playback-speed">
+                  <option value="0.5">0.5x</option>
+                  <option value="1" selected>1x</option>
+                  <option value="2">2x</option>
+                  <option value="4">4x</option>
+                </select>
+              </div>
             </div>
           </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Color Min</label>
+              <input type="number" id="color-min" value="0" min="0" step="1" />
+            </div>
+            <div class="form-group">
+              <label>Color Max</label>
+              <input type="number" id="color-max" value="40" min="1" step="1" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Opacity</label>
+            <input type="range" id="opacity" value="70" min="0" max="100" />
+          </div>
+          <div class="form-group">
+            <label>Elevation Offset (m)</label>
+            <input
+              type="number"
+              id="elevation-offset"
+              value="5"
+              min="0"
+              max="100"
+              step="1"
+            />
+          </div>
+          <div class="legend">
+            <div style="width: 100%">
+              <div class="legend-gradient"></div>
+              <div class="legend-labels">
+                <span id="legend-min">0</span>
+                <span id="legend-unit"></span>
+                <span id="legend-max">40</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3D Scene -->
+      <div id="viewDiv">
+        <div id="loading-overlay" class="loading-overlay">
+          <div class="spinner"></div>
+          <div class="loading-text">Running simulation...</div>
         </div>
       </div>
     </div>
 
-    <!-- 3D Scene -->
-    <div id="viewDiv">
-      <div id="loading-overlay" class="loading-overlay">
-        <div class="spinner"></div>
-        <div class="loading-text">Running simulation...</div>
-      </div>
-    </div>
-  </div>
+    <!-- JavaScript -->
+    <script>
+      // Load weBIGeo module dynamically
+      let createWebigeoModule = null;
 
-  <!-- JavaScript -->
-  <script>
-    // Load weBIGeo module dynamically
-    let createWebigeoModule = null;
+      // ArcGIS modules for 3D
+      require([
+        "esri/Map",
+        "esri/views/SceneView",
+        "esri/layers/GraphicsLayer",
+        "esri/layers/MediaLayer",
+        "esri/layers/support/ImageElement",
+        "esri/layers/support/ExtentAndRotationGeoreference",
+        "esri/geometry/Extent",
+        "esri/geometry/Point",
+        "esri/geometry/Polygon",
+        "esri/geometry/projection",
+        "esri/widgets/Sketch",
+        "esri/Graphic",
+        "esri/symbols/SimpleFillSymbol",
+        "esri/symbols/PolygonSymbol3D",
+        "esri/symbols/FillSymbol3DLayer",
+        "esri/layers/ElevationLayer",
+        "esri/Ground",
+      ], function (
+        Map,
+        SceneView,
+        GraphicsLayer,
+        MediaLayer,
+        ImageElement,
+        ExtentAndRotationGeoreference,
+        Extent,
+        Point,
+        Polygon,
+        projection,
+        Sketch,
+        Graphic,
+        SimpleFillSymbol,
+        PolygonSymbol3D,
+        FillSymbol3DLayer,
+        ElevationLayer,
+        Ground
+      ) {
+        // State
+        let simulator = null;
+        let webigeoModule = null; // Store the weBIGeo module reference
+        let currentResult = null;
+        let mediaLayer = null;
+        let currentDrawMode = null; // 'area' or 'release'
 
-    // ArcGIS modules for 3D
-    require([
-      'esri/Map',
-      'esri/views/SceneView',
-      'esri/layers/GraphicsLayer',
-      'esri/layers/MediaLayer',
-      'esri/layers/support/ImageElement',
-      'esri/layers/support/ExtentAndRotationGeoreference',
-      'esri/geometry/Extent',
-      'esri/geometry/Point',
-      'esri/geometry/Polygon',
-      'esri/geometry/projection',
-      'esri/widgets/Sketch',
-      'esri/Graphic',
-      'esri/symbols/SimpleFillSymbol',
-      'esri/symbols/PolygonSymbol3D',
-      'esri/symbols/FillSymbol3DLayer',
-      'esri/layers/ElevationLayer',
-      'esri/Ground'
-    ], function(
-      Map, SceneView, GraphicsLayer, MediaLayer, ImageElement,
-      ExtentAndRotationGeoreference, Extent, Point, Polygon,
-      projection, Sketch, Graphic, SimpleFillSymbol,
-      PolygonSymbol3D, FillSymbol3DLayer, ElevationLayer, Ground
-    ) {
-      // State
-      let simulator = null;
-      let webigeoModule = null;  // Store the weBIGeo module reference
-      let currentResult = null;
-      let mediaLayer = null;
-      let currentDrawMode = null; // 'area' or 'release'
+        // DOM elements
+        const statusEl = document.getElementById("status");
+        const btnDrawArea = document.getElementById("btn-draw-area");
+        const btnDrawRelease = document.getElementById("btn-draw-release");
+        const btnClear = document.getElementById("btn-clear");
+        const btnRun = document.getElementById("btn-run");
+        const loadingOverlay = document.getElementById("loading-overlay");
+        const resultsContent = document.getElementById("results-content");
+        const layerSelect = document.getElementById("layer-select");
+        const opacitySlider = document.getElementById("opacity");
+        const elevationOffsetInput =
+          document.getElementById("elevation-offset");
+        const areaCountEl = document.getElementById("area-count");
+        const releaseCountEl = document.getElementById("release-count");
+        const colorMinInput = document.getElementById("color-min");
+        const colorMaxInput = document.getElementById("color-max");
+        const legendMinEl = document.getElementById("legend-min");
+        const legendMaxEl = document.getElementById("legend-max");
+        const legendUnitEl = document.getElementById("legend-unit");
+        const timeseriesEnabledCheckbox =
+          document.getElementById("timeseries-enabled");
+        const timeseriesSettingsDiv = document.getElementById(
+          "timeseries-settings"
+        );
+        const timeseriesControlsDiv = document.getElementById(
+          "timeseries-controls"
+        );
+        const timeseriesNoDataDiv =
+          document.getElementById("timeseries-no-data");
+        const timeseriesPlayerDiv =
+          document.getElementById("timeseries-player");
+        const frameSlider = document.getElementById("frame-slider");
+        const currentFrameEl = document.getElementById("current-frame");
+        const totalFramesEl = document.getElementById("total-frames");
+        const currentTimeEl = document.getElementById("current-time");
+        const btnPlay = document.getElementById("btn-play");
+        const btnStop = document.getElementById("btn-stop");
+        const playbackSpeedSelect = document.getElementById("playback-speed");
 
-      // DOM elements
-      const statusEl = document.getElementById('status');
-      const btnDrawArea = document.getElementById('btn-draw-area');
-      const btnDrawRelease = document.getElementById('btn-draw-release');
-      const btnClear = document.getElementById('btn-clear');
-      const btnRun = document.getElementById('btn-run');
-      const loadingOverlay = document.getElementById('loading-overlay');
-      const resultsContent = document.getElementById('results-content');
-      const layerSelect = document.getElementById('layer-select');
-      const opacitySlider = document.getElementById('opacity');
-      const elevationOffsetInput = document.getElementById('elevation-offset');
-      const areaCountEl = document.getElementById('area-count');
-      const releaseCountEl = document.getElementById('release-count');
-      const colorMinInput = document.getElementById('color-min');
-      const colorMaxInput = document.getElementById('color-max');
-      const legendMinEl = document.getElementById('legend-min');
-      const legendMaxEl = document.getElementById('legend-max');
-      const legendUnitEl = document.getElementById('legend-unit');
-      const timeseriesEnabledCheckbox = document.getElementById('timeseries-enabled');
-      const timeseriesSettingsDiv = document.getElementById('timeseries-settings');
-      const timeseriesControlsDiv = document.getElementById('timeseries-controls');
-      const timeseriesNoDataDiv = document.getElementById('timeseries-no-data');
-      const timeseriesPlayerDiv = document.getElementById('timeseries-player');
-      const frameSlider = document.getElementById('frame-slider');
-      const currentFrameEl = document.getElementById('current-frame');
-      const totalFramesEl = document.getElementById('total-frames');
-      const currentTimeEl = document.getElementById('current-time');
-      const btnPlay = document.getElementById('btn-play');
-      const btnStop = document.getElementById('btn-stop');
-      const playbackSpeedSelect = document.getElementById('playback-speed');
+        // Default color map bounds per layer
+        const defaultColorBounds = {
+          zdelta: { min: 0, max: 40, unit: "m/s" },
+          cellCounts: { min: 0, max: 100, unit: "" },
+          travelLength: { min: 0, max: 2000, unit: "m" },
+          travelAngle: { min: 0, max: 45, unit: "\u00B0" },
+          heightDifference: { min: 0, max: 1000, unit: "m" },
+          timeseries: { min: 0, max: 5, unit: "m" }, // Flow height H(x,y,t)
+        };
 
-      // Default color map bounds per layer
-      const defaultColorBounds = {
-        zdelta: { min: 0, max: 40, unit: 'm/s' },
-        cellCounts: { min: 0, max: 100, unit: '' },
-        travelLength: { min: 0, max: 2000, unit: 'm' },
-        travelAngle: { min: 0, max: 45, unit: '\u00B0' },
-        heightDifference: { min: 0, max: 1000, unit: 'm' },
-        timeseries: { min: 0, max: 5, unit: 'm' }  // Flow height H(x,y,t)
-      };
+        // Animation state
+        let animationId = null;
+        let isPlaying = false;
 
-      // Animation state
-      let animationId = null;
-      let isPlaying = false;
+        // Current color map settings (will be updated per layer)
+        let colorMapSettings = JSON.parse(JSON.stringify(defaultColorBounds));
 
-      // Current color map settings (will be updated per layer)
-      let colorMapSettings = JSON.parse(JSON.stringify(defaultColorBounds));
+        // Hide loading overlay initially
+        loadingOverlay.classList.add("hidden");
 
-      // Hide loading overlay initially
-      loadingOverlay.classList.add('hidden');
+        // 3D symbols for different polygon types
+        const areaSymbol = new PolygonSymbol3D({
+          symbolLayers: [
+            new FillSymbol3DLayer({
+              material: { color: [52, 152, 219, 0.3] },
+              outline: { color: [52, 152, 219, 1], size: 2 },
+            }),
+          ],
+        });
 
-      // 3D symbols for different polygon types
-      const areaSymbol = new PolygonSymbol3D({
-        symbolLayers: [
-          new FillSymbol3DLayer({
-            material: { color: [52, 152, 219, 0.3] },
-            outline: { color: [52, 152, 219, 1], size: 2 }
-          })
-        ]
-      });
+        const releaseSymbol = new PolygonSymbol3D({
+          symbolLayers: [
+            new FillSymbol3DLayer({
+              material: { color: [231, 76, 60, 0.5] },
+              outline: { color: [231, 76, 60, 1], size: 2 },
+            }),
+          ],
+        });
 
-      const releaseSymbol = new PolygonSymbol3D({
-        symbolLayers: [
-          new FillSymbol3DLayer({
-            material: { color: [231, 76, 60, 0.5] },
-            outline: { color: [231, 76, 60, 1], size: 2 }
-          })
-        ]
-      });
+        // Create separate graphics layers for area and release polygons
+        const areaLayer = new GraphicsLayer({
+          title: "Calculation Area",
+          elevationInfo: { mode: "on-the-ground" },
+        });
 
-      // Create separate graphics layers for area and release polygons
-      const areaLayer = new GraphicsLayer({
-        title: 'Calculation Area',
-        elevationInfo: { mode: 'on-the-ground' }
-      });
+        const releaseLayer = new GraphicsLayer({
+          title: "Release Areas",
+          elevationInfo: { mode: "on-the-ground" },
+        });
 
-      const releaseLayer = new GraphicsLayer({
-        title: 'Release Areas',
-        elevationInfo: { mode: 'on-the-ground' }
-      });
+        // Create elevation layer for terrain
+        const elevationLayer = new ElevationLayer({
+          url: "https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/Terrain3D/ImageServer",
+        });
 
-      // Create elevation layer for terrain
-      const elevationLayer = new ElevationLayer({
-        url: 'https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/Terrain3D/ImageServer'
-      });
+        // Create map with terrain
+        const map = new Map({
+          basemap: "satellite",
+          ground: new Ground({
+            layers: [elevationLayer],
+          }),
+          layers: [areaLayer, releaseLayer],
+        });
 
-      // Create map with terrain
-      const map = new Map({
-        basemap: 'satellite',
-        ground: new Ground({
-          layers: [elevationLayer]
-        }),
-        layers: [areaLayer, releaseLayer]
-      });
-
-      // Create 3D SceneView
-      const view = new SceneView({
-        container: 'viewDiv',
-        map: map,
-        camera: {
-          position: {
-            longitude: 10.5,
-            latitude: 46.75,
-            z: 4000
+        // Create 3D SceneView
+        const view = new SceneView({
+          container: "viewDiv",
+          map: map,
+          camera: {
+            position: {
+              longitude: 8.72946308,
+              latitude: 46.93387094,
+              z: 4000,
+            },
+            tilt: 60,
+            heading: 250,
           },
-          tilt: 70,
-          heading: 0
-        },
-        environment: {
-          atmosphere: {
-            quality: 'high'
+          environment: {
+            atmosphere: {
+              quality: "high",
+            },
+            lighting: {
+              date: new Date("June 15, 2024 10:00:00 UTC"),
+              directShadowsEnabled: true,
+            },
           },
-          lighting: {
-            date: new Date('June 15, 2024 10:00:00 UTC'),
-            directShadowsEnabled: true
+          qualityProfile: "high",
+        });
+
+        // Create sketch widgets for each layer
+        const areaSketch = new Sketch({
+          view: view,
+          layer: areaLayer,
+          creationMode: "single",
+          availableCreateTools: ["polygon"],
+          defaultCreateOptions: { mode: "click" },
+          polygonSymbol: areaSymbol,
+          visible: false,
+        });
+
+        const releaseSketch = new Sketch({
+          view: view,
+          layer: releaseLayer,
+          creationMode: "single",
+          availableCreateTools: ["polygon"],
+          defaultCreateOptions: { mode: "click" },
+          polygonSymbol: releaseSymbol,
+          visible: false,
+        });
+
+        // Update counts when graphics change
+        function updateCounts() {
+          areaCountEl.textContent = areaLayer.graphics.length;
+          releaseCountEl.textContent = releaseLayer.graphics.length;
+        }
+
+        areaLayer.on("change", updateCounts);
+        releaseLayer.on("change", updateCounts);
+
+        // Handle sketch completion
+        areaSketch.on("create", (event) => {
+          if (event.state === "complete") {
+            // Only allow one calculation area
+            if (areaLayer.graphics.length > 1) {
+              areaLayer.remove(areaLayer.graphics.getItemAt(0));
+            }
+            updateCounts();
           }
-        },
-        qualityProfile: 'high'
-      });
+        });
 
-      // Create sketch widgets for each layer
-      const areaSketch = new Sketch({
-        view: view,
-        layer: areaLayer,
-        creationMode: 'single',
-        availableCreateTools: ['polygon'],
-        defaultCreateOptions: { mode: 'click' },
-        polygonSymbol: areaSymbol,
-        visible: false
-      });
+        releaseSketch.on("create", (event) => {
+          if (event.state === "complete") {
+            updateCounts();
+          }
+        });
 
-      const releaseSketch = new Sketch({
-        view: view,
-        layer: releaseLayer,
-        creationMode: 'single',
-        availableCreateTools: ['polygon'],
-        defaultCreateOptions: { mode: 'click' },
-        polygonSymbol: releaseSymbol,
-        visible: false
-      });
+        // Initialize
+        view.when(async () => {
+          await projection.load();
 
-      // Update counts when graphics change
-      function updateCounts() {
-        areaCountEl.textContent = areaLayer.graphics.length;
-        releaseCountEl.textContent = releaseLayer.graphics.length;
-      }
+          // Initialize weBIGeo simulator
+          try {
+            // Load weBIGeo module dynamically (ES module)
+            const webigeoImport = await import("./webigeo.js?v=" + Date.now());
+            createWebigeoModule = webigeoImport.default;
 
-      areaLayer.on('change', updateCounts);
-      releaseLayer.on('change', updateCounts);
+            webigeoModule = await createWebigeoModule();
+            const isSupported =
+              await webigeoModule.AvalancheSimulator.isSupported();
+            if (!isSupported) throw new Error("WebGPU not supported");
+            simulator = new webigeoModule.AvalancheSimulator();
+            await simulator.init();
 
-      // Handle sketch completion
-      areaSketch.on('create', (event) => {
-        if (event.state === 'complete') {
-          // Only allow one calculation area
-          if (areaLayer.graphics.length > 1) {
-            areaLayer.remove(areaLayer.graphics.getItemAt(0));
+            console.log("weBIGeo simulator initialized");
+
+            setStatus("ready", "Ready");
+            enableControls(true);
+          } catch (error) {
+            console.error("Initialization failed:", error);
+            setStatus("error", "Error: " + error.message);
+          }
+        });
+
+        // Button handlers
+        btnDrawArea.addEventListener("click", () => {
+          currentDrawMode = "area";
+          areaSketch.create("polygon");
+        });
+
+        btnDrawRelease.addEventListener("click", () => {
+          currentDrawMode = "release";
+          releaseSketch.create("polygon");
+        });
+
+        btnClear.addEventListener("click", () => {
+          areaLayer.removeAll();
+          releaseLayer.removeAll();
+          if (mediaLayer) {
+            map.remove(mediaLayer);
+            mediaLayer = null;
           }
           updateCounts();
-        }
-      });
+          resultsContent.innerHTML =
+            '<p style="color: #6c757d; font-size: 0.85em;">No simulation run yet.</p>';
+        });
 
-      releaseSketch.on('create', (event) => {
-        if (event.state === 'complete') {
-          updateCounts();
-        }
-      });
+        btnRun.addEventListener("click", runSimulation);
 
-      // Initialize
-      view.when(async () => {
-        await projection.load();
-
-        // Initialize weBIGeo simulator
-        try {
-          // Load weBIGeo module dynamically (ES module)
-          const webigeoImport = await import('./webigeo.js?v=' + Date.now());
-          createWebigeoModule = webigeoImport.default;
-
-          webigeoModule = await createWebigeoModule();
-          const isSupported = await webigeoModule.AvalancheSimulator.isSupported();
-          if (!isSupported) throw new Error('WebGPU not supported');
-          simulator = new webigeoModule.AvalancheSimulator();
-          await simulator.init();
-
-          console.log('weBIGeo simulator initialized');
-
-          setStatus('ready', 'Ready');
-          enableControls(true);
-        } catch (error) {
-          console.error('Initialization failed:', error);
-          setStatus('error', 'Error: ' + error.message);
-        }
-      });
-
-      // Button handlers
-      btnDrawArea.addEventListener('click', () => {
-        currentDrawMode = 'area';
-        areaSketch.create('polygon');
-      });
-
-      btnDrawRelease.addEventListener('click', () => {
-        currentDrawMode = 'release';
-        releaseSketch.create('polygon');
-      });
-
-      btnClear.addEventListener('click', () => {
-        areaLayer.removeAll();
-        releaseLayer.removeAll();
-        if (mediaLayer) {
-          map.remove(mediaLayer);
-          mediaLayer = null;
-        }
-        updateCounts();
-        resultsContent.innerHTML = '<p style="color: #6c757d; font-size: 0.85em;">No simulation run yet.</p>';
-      });
-
-      btnRun.addEventListener('click', runSimulation);
-
-      // Layer controls
-      layerSelect.addEventListener('change', () => {
-        // Update color map UI for the selected layer
-        updateColorMapUI();
-        updateVisualization();
-      });
-      opacitySlider.addEventListener('input', () => {
-        if (mediaLayer) {
-          mediaLayer.opacity = opacitySlider.value / 100;
-        }
-      });
-      elevationOffsetInput.addEventListener('change', updateVisualization);
-
-      // Color map bounds change handlers
-      colorMinInput.addEventListener('change', () => {
-        const layerName = layerSelect.value;
-        colorMapSettings[layerName].min = parseFloat(colorMinInput.value);
-        updateLegend();
-      });
-      colorMaxInput.addEventListener('change', () => {
-        const layerName = layerSelect.value;
-        colorMapSettings[layerName].max = parseFloat(colorMaxInput.value);
-        updateLegend();
-      });
-
-      // Update color map UI for selected layer
-      function updateColorMapUI() {
-        const layerName = layerSelect.value;
-        const bounds = colorMapSettings[layerName];
-        colorMinInput.value = bounds.min;
-        colorMaxInput.value = bounds.max;
-        updateLegend();
-      }
-
-      // Update legend with current values
-      function updateLegend() {
-        const layerName = layerSelect.value;
-        const bounds = colorMapSettings[layerName];
-        legendMinEl.textContent = bounds.min;
-        legendMaxEl.textContent = bounds.max;
-        legendUnitEl.textContent = bounds.unit;
-      }
-
-      // Initialize color map UI
-      updateColorMapUI();
-
-      // Time-series checkbox toggle handler
-      timeseriesEnabledCheckbox.addEventListener('change', () => {
-        timeseriesSettingsDiv.style.display = timeseriesEnabledCheckbox.checked ? 'block' : 'none';
-        // Auto-select timeseries layer when enabled
-        if (timeseriesEnabledCheckbox.checked) {
-          layerSelect.value = 'timeseries';
+        // Layer controls
+        layerSelect.addEventListener("change", () => {
+          // Update color map UI for the selected layer
           updateColorMapUI();
-        }
-      });
-
-      // Layer select change - show/hide time-series controls
-      layerSelect.addEventListener('change', () => {
-        const isTimeseries = layerSelect.value === 'timeseries';
-        timeseriesControlsDiv.style.display = isTimeseries ? 'block' : 'none';
-
-        // Show player or no-data message based on whether data is available
-        const hasData = currentResult?.timeSeries?.data;
-        timeseriesNoDataDiv.style.display = isTimeseries && !hasData ? 'block' : 'none';
-        timeseriesPlayerDiv.style.display = isTimeseries && hasData ? 'block' : 'none';
-
-        if (!isTimeseries) {
-          stopAnimation();
-        }
-        updateColorMapUI();
-      });
-
-      // Frame slider change
-      frameSlider.addEventListener('input', () => {
-        const frame = parseInt(frameSlider.value);
-        currentFrameEl.textContent = frame;
-        // Update time display
-        const interval = currentResult?.timeSeries?.timeInterval || 1.0;
-        currentTimeEl.textContent = (frame * interval).toFixed(1);
-        renderTimeseriesFrame(frame);
-      });
-
-      // Play/Stop buttons
-      btnPlay.addEventListener('click', () => {
-        if (!isPlaying) {
-          startAnimation();
-        }
-      });
-
-      btnStop.addEventListener('click', () => {
-        stopAnimation();
-      });
-
-      // Animation functions
-      function startAnimation() {
-        if (isPlaying || !currentResult?.timeSeries?.data) return;
-        isPlaying = true;
-        btnPlay.textContent = 'Pause';
-
-        const speed = parseFloat(playbackSpeedSelect.value);
-        const interval = currentResult.timeSeries.timeInterval * 1000 / speed; // ms per frame
-
-        function animate() {
-          let frame = parseInt(frameSlider.value);
-          frame++;
-          if (frame >= parseInt(frameSlider.max)) {
-            frame = 0; // Loop back to start
+          updateVisualization();
+        });
+        opacitySlider.addEventListener("input", () => {
+          if (mediaLayer) {
+            mediaLayer.opacity = opacitySlider.value / 100;
           }
-          frameSlider.value = frame;
+        });
+        elevationOffsetInput.addEventListener("change", updateVisualization);
+
+        // Color map bounds change handlers
+        colorMinInput.addEventListener("change", () => {
+          const layerName = layerSelect.value;
+          colorMapSettings[layerName].min = parseFloat(colorMinInput.value);
+          updateLegend();
+        });
+        colorMaxInput.addEventListener("change", () => {
+          const layerName = layerSelect.value;
+          colorMapSettings[layerName].max = parseFloat(colorMaxInput.value);
+          updateLegend();
+        });
+
+        // Update color map UI for selected layer
+        function updateColorMapUI() {
+          const layerName = layerSelect.value;
+          const bounds = colorMapSettings[layerName];
+          colorMinInput.value = bounds.min;
+          colorMaxInput.value = bounds.max;
+          updateLegend();
+        }
+
+        // Update legend with current values
+        function updateLegend() {
+          const layerName = layerSelect.value;
+          const bounds = colorMapSettings[layerName];
+          legendMinEl.textContent = bounds.min;
+          legendMaxEl.textContent = bounds.max;
+          legendUnitEl.textContent = bounds.unit;
+        }
+
+        // Initialize color map UI
+        updateColorMapUI();
+
+        // Time-series checkbox toggle handler
+        timeseriesEnabledCheckbox.addEventListener("change", () => {
+          timeseriesSettingsDiv.style.display =
+            timeseriesEnabledCheckbox.checked ? "block" : "none";
+          // Auto-select timeseries layer when enabled
+          if (timeseriesEnabledCheckbox.checked) {
+            layerSelect.value = "timeseries";
+            updateColorMapUI();
+          }
+        });
+
+        // Layer select change - show/hide time-series controls
+        layerSelect.addEventListener("change", () => {
+          const isTimeseries = layerSelect.value === "timeseries";
+          timeseriesControlsDiv.style.display = isTimeseries ? "block" : "none";
+
+          // Show player or no-data message based on whether data is available
+          const hasData = currentResult?.timeSeries?.data;
+          timeseriesNoDataDiv.style.display =
+            isTimeseries && !hasData ? "block" : "none";
+          timeseriesPlayerDiv.style.display =
+            isTimeseries && hasData ? "block" : "none";
+
+          if (!isTimeseries) {
+            stopAnimation();
+          }
+          updateColorMapUI();
+        });
+
+        // Frame slider change
+        frameSlider.addEventListener("input", () => {
+          const frame = parseInt(frameSlider.value);
           currentFrameEl.textContent = frame;
           // Update time display
-          const timeInterval = currentResult?.timeSeries?.timeInterval || 1.0;
-          currentTimeEl.textContent = (frame * timeInterval).toFixed(1);
+          const interval = currentResult?.timeSeries?.timeInterval || 1.0;
+          currentTimeEl.textContent = (frame * interval).toFixed(1);
           renderTimeseriesFrame(frame);
+        });
 
-          if (isPlaying) {
-            animationId = setTimeout(animate, interval);
+        // Play/Stop buttons
+        btnPlay.addEventListener("click", () => {
+          if (!isPlaying) {
+            startAnimation();
           }
-        }
-        animate();
-      }
+        });
 
-      function stopAnimation() {
-        isPlaying = false;
-        btnPlay.textContent = 'Play';
-        if (animationId) {
-          clearTimeout(animationId);
-          animationId = null;
-        }
-      }
+        btnStop.addEventListener("click", () => {
+          stopAnimation();
+        });
 
-      // Render a specific time-series frame
-      function renderTimeseriesFrame(frameIndex) {
-        if (!currentResult?.timeSeries?.data || !currentResult.extent) return;
+        // Animation functions
+        function startAnimation() {
+          if (isPlaying || !currentResult?.timeSeries?.data) return;
+          isPlaying = true;
+          btnPlay.textContent = "Pause";
 
-        const ts = currentResult.timeSeries;
-        const width = ts.width;
-        const height = ts.height;
-        const frameSize = width * height;
-        const frameOffset = frameIndex * frameSize;
+          const speed = parseFloat(playbackSpeedSelect.value);
+          const interval =
+            (currentResult.timeSeries.timeInterval * 1000) / speed; // ms per frame
 
-        // Get color map bounds for time-series
-        const bounds = colorMapSettings.timeseries;
-        const minVal = bounds.min;
-        const maxVal = bounds.max;
-
-        // Create canvas for this frame
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        const imageData = ctx.createImageData(width, height);
-
-        // Calculate flow height and apply color map
-        const particlesPerCell = currentResult.settings?.numParticlesPerReleaseCell || 64;
-        const referenceHeight = ts.referenceHeight || 1.0;
-
-        // Check if deposition data is available
-        const hasDeposition = ts.depositionData && ts.depositionData.length > 0;
-
-        for (let y = 0; y < height; y++) {
-          for (let x = 0; x < width; x++) {
-            const i = y * width + x;
-
-            // Get current flow (particles moving at this time)
-            const flowCount = ts.data[frameOffset + i];
-            const flowHeight = (flowCount / particlesPerCell) * referenceHeight;
-
-            // Get pre-computed cumulative deposition up to current frame
-            let cumulativeDeposition = 0;
-            if (hasDeposition && ts.cumulativeDeposition) {
-              cumulativeDeposition = ts.cumulativeDeposition[frameOffset + i];
+          function animate() {
+            let frame = parseInt(frameSlider.value);
+            frame++;
+            if (frame >= parseInt(frameSlider.max)) {
+              frame = 0; // Loop back to start
             }
-            const depositionHeight = (cumulativeDeposition / particlesPerCell) * referenceHeight;
+            frameSlider.value = frame;
+            currentFrameEl.textContent = frame;
+            // Update time display
+            const timeInterval = currentResult?.timeSeries?.timeInterval || 1.0;
+            currentTimeEl.textContent = (frame * timeInterval).toFixed(1);
+            renderTimeseriesFrame(frame);
 
-            // Total snow = flow + cumulative deposition
-            const totalSnow = flowHeight + depositionHeight;
-
-            // Apply color mapping (yellow -> orange -> red for flow, blue tint for deposition)
-            const idx = i * 4;
-            if (totalSnow > 0) {
-              const t = Math.min((totalSnow - minVal) / (maxVal - minVal), 1.0);
-
-              // Blend ratio: how much of total is deposition vs flow
-              const depositionRatio = totalSnow > 0 ? depositionHeight / totalSnow : 0;
-
-              // Flow colors: Yellow (255,255,0) -> Orange (255,136,0) -> Red (255,0,0)
-              // Deposition color: Light blue (100,150,255) for settled snow
-              let r, g, b;
-
-              if (depositionRatio > 0.8) {
-                // Mostly deposition: use blue-white gradient for settled snow
-                const s = Math.min(t * 2, 1.0);
-                r = Math.round(200 + 55 * (1 - s)); // 255 -> 200
-                g = Math.round(220 + 35 * (1 - s)); // 255 -> 220
-                b = 255; // Stay blue-ish
-              } else if (flowHeight > 0) {
-                // Active flow present: use warm colors
-                if (t < 0.5) {
-                  const s = t * 2;
-                  r = 255;
-                  g = Math.round(255 - (255 - 136) * s);
-                  b = Math.round(255 * (1 - s));
-                } else {
-                  const s = (t - 0.5) * 2;
-                  r = 255;
-                  g = Math.round(136 * (1 - s));
-                  b = 0;
-                }
-                // Blend in some blue based on deposition ratio
-                if (depositionRatio > 0) {
-                  r = Math.round(r * (1 - depositionRatio * 0.3) + 180 * depositionRatio * 0.3);
-                  g = Math.round(g * (1 - depositionRatio * 0.3) + 200 * depositionRatio * 0.3);
-                  b = Math.round(b + (255 - b) * depositionRatio * 0.5);
-                }
-              } else {
-                // Only deposition (no current flow): settled snow (white-blue)
-                const s = Math.min(t * 2, 1.0);
-                r = Math.round(220 + 35 * (1 - s));
-                g = Math.round(235 + 20 * (1 - s));
-                b = 255;
-              }
-
-              imageData.data[idx + 0] = r;
-              imageData.data[idx + 1] = g;
-              imageData.data[idx + 2] = b;
-              imageData.data[idx + 3] = 255;
-            } else {
-              // Transparent for no snow
-              imageData.data[idx + 0] = 0;
-              imageData.data[idx + 1] = 0;
-              imageData.data[idx + 2] = 0;
-              imageData.data[idx + 3] = 0;
+            if (isPlaying) {
+              animationId = setTimeout(animate, interval);
             }
           }
+          animate();
         }
 
-        ctx.putImageData(imageData, 0, 0);
-        addCanvasToScene(canvas, currentResult.extent);
-      }
-
-      // Helper functions
-      function setStatus(type, text) {
-        statusEl.className = 'status ' + type;
-        statusEl.textContent = text;
-      }
-
-      function enableControls(enabled) {
-        btnDrawArea.disabled = !enabled;
-        btnDrawRelease.disabled = !enabled;
-        btnClear.disabled = !enabled;
-        btnRun.disabled = !enabled;
-      }
-
-      function showLoading(show, text = 'Running simulation...') {
-        if (show) {
-          loadingOverlay.classList.remove('hidden');
-          loadingOverlay.querySelector('.loading-text').textContent = text;
-        } else {
-          loadingOverlay.classList.add('hidden');
-        }
-      }
-
-      // Run simulation
-      async function runSimulation() {
-        // Validate inputs
-        const areaGraphics = areaLayer.graphics.toArray();
-        const releaseGraphics = releaseLayer.graphics.toArray();
-
-        if (areaGraphics.length === 0) {
-          alert('Please draw a calculation area first.');
-          return;
-        }
-
-        if (releaseGraphics.length === 0) {
-          alert('Please draw at least one release area.');
-          return;
-        }
-
-        showLoading(true);
-        enableControls(false);
-        setStatus('loading', 'Simulating...');
-
-        try {
-          // Use the calculation area extent (first area polygon)
-          const calculationArea = areaGraphics[0].geometry;
-          let extent = calculationArea.extent.clone();
-
-          // Project to Web Mercator
-          const webMercatorExtent = projection.project(extent, { wkid: 3857 });
-
-          // Get settings
-          const settings = {
-            numParticlesPerReleaseCell: parseInt(document.getElementById('particles').value),
-            numSimulationSteps: parseInt(document.getElementById('steps').value),
-            maxRandomDeviation: parseFloat(document.getElementById('deviation').value),
-            maxRunoutAngle: parseFloat(document.getElementById('runout').value),
-            persistence: parseFloat(document.getElementById('persistence').value)
-          };
-
-          // Add time-series settings if enabled
-          if (timeseriesEnabledCheckbox.checked) {
-            settings.timeSeries = {
-              enabled: true,
-              maxFrames: parseInt(document.getElementById('timeseries-max-frames').value),
-              timeInterval: parseFloat(document.getElementById('timeseries-interval').value),
-              referenceHeight: parseFloat(document.getElementById('timeseries-ref-height').value)
-            };
-            console.log('[ArcGIS] Time-series enabled:', settings.timeSeries);
+        function stopAnimation() {
+          isPlaying = false;
+          btnPlay.textContent = "Play";
+          if (animationId) {
+            clearTimeout(animationId);
+            animationId = null;
           }
-
-          const resolution = parseFloat(document.getElementById('resolution').value);
-
-          // Calculate dimensions
-          const width = Math.ceil((webMercatorExtent.xmax - webMercatorExtent.xmin) / resolution);
-          const height = Math.ceil((webMercatorExtent.ymax - webMercatorExtent.ymin) / resolution);
-
-          console.log(`Simulation area: ${width}x${height} pixels at ${resolution}m resolution`);
-
-          // Fetch heightmap (demo: generate fake data)
-          showLoading(true, 'Fetching elevation data...');
-          const heightmap = await fetchHeightmap(webMercatorExtent, width, height);
-
-          // Create release cells mask from release polygons only
-          showLoading(true, 'Creating release cells...');
-          const releaseCells = createReleaseCellsMask(releaseGraphics, webMercatorExtent, width, height);
-
-          // Run simulation
-          showLoading(true, 'Running GPU simulation...');
-
-          // Apply color map bounds for all layers before running
-          for (const [layerName, bounds] of Object.entries(colorMapSettings)) {
-            webigeoModule._setColorMapBounds(
-              simulator.$$.ptr,
-              layerName,
-              bounds.min,
-              bounds.max
-            );
-          }
-
-          const input = {
-            aabb: {
-              minX: webMercatorExtent.xmin,
-              minY: webMercatorExtent.ymin,
-              maxX: webMercatorExtent.xmax,
-              maxY: webMercatorExtent.ymax
-            },
-            heightmap: heightmap,
-            releaseCells: releaseCells
-          };
-
-          currentResult = await simulator.run(input, settings);
-          console.log('[ArcGIS] Simulation result:', currentResult);
-          console.log('[ArcGIS] Has imageData:', !!currentResult.imageData);
-          console.log('[ArcGIS] imageData length:', currentResult.imageData ? currentResult.imageData.length : 0);
-          console.log('[ArcGIS] width:', currentResult.width, 'height:', currentResult.height);
-          console.log('[ArcGIS] Has timeSeries:', !!currentResult.timeSeries);
-          if (currentResult.timeSeries) {
-            console.log('[ArcGIS] timeSeries enabled:', currentResult.timeSeries.enabled);
-            console.log('[ArcGIS] timeSeries data length:', currentResult.timeSeries.data?.length);
-          }
-
-          currentResult.extent = webMercatorExtent;
-          currentResult.settings = settings; // Store settings for reference
-
-          // Display results
-          displayResults(currentResult);
-          updateVisualization();
-
-          setStatus('ready', 'Complete');
-        } catch (error) {
-          console.error('Simulation failed:', error);
-          setStatus('error', 'Error: ' + error.message);
-          alert('Simulation failed: ' + error.message);
-        } finally {
-          showLoading(false);
-          enableControls(true);
         }
-      }
 
-      // Fetch heightmap from elevation service using ElevationSampler
-      async function fetchHeightmap(extent, width, height) {
-        const data = new Uint8Array(width * height * 4);
-        const cellWidth = (extent.xmax - extent.xmin) / width;
-        const cellHeight = (extent.ymax - extent.ymin) / height;
+        // Render a specific time-series frame
+        function renderTimeseriesFrame(frameIndex) {
+          if (!currentResult?.timeSeries?.data || !currentResult.extent) return;
 
-        try {
-          // Create an ElevationSampler for the extent
-          // The ground must be loaded first
-          await map.ground.load();
+          const ts = currentResult.timeSeries;
+          const width = ts.width;
+          const height = ts.height;
+          const frameSize = width * height;
+          const frameOffset = frameIndex * frameSize;
 
-          // Create sampler with the requested extent
-          // The sampler caches elevation data for synchronous querying
-          const sampler = await map.ground.createElevationSampler(extent, {
-            demResolution: 'finest-contiguous' // Get best available resolution
-          });
+          // Get color map bounds for time-series
+          const bounds = colorMapSettings.timeseries;
+          const minVal = bounds.min;
+          const maxVal = bounds.max;
 
-          console.log(`[ElevationSampler] Created sampler for extent`);
-          console.log(`[ElevationSampler] DEM resolution: min=${sampler.demResolution?.min}, max=${sampler.demResolution?.max}`);
-          console.log(`[ElevationSampler] Spatial reference: ${sampler.spatialReference?.wkid}`);
+          // Create canvas for this frame
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          const imageData = ctx.createImageData(width, height);
 
-          // Sample elevation for each cell
-          // Use elevationAt() for performance when querying many points
+          // Calculate flow height and apply color map
+          const particlesPerCell =
+            currentResult.settings?.numParticlesPerReleaseCell || 64;
+          const referenceHeight = ts.referenceHeight || 1.0;
+
+          // Check if deposition data is available
+          const hasDeposition =
+            ts.depositionData && ts.depositionData.length > 0;
+
           for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
-              // Calculate center of each cell
-              const px = extent.xmin + (x + 0.5) * cellWidth;
-              const py = extent.ymax - (y + 0.5) * cellHeight; // Y flipped (top to bottom)
+              const i = y * width + x;
 
-              // Get elevation using elevationAt (synchronous, fast)
-              let elevation = sampler.elevationAt(px, py);
+              // Get current flow (particles moving at this time)
+              const flowCount = ts.data[frameOffset + i];
+              const flowHeight =
+                (flowCount / particlesPerCell) * referenceHeight;
 
-              // Handle no-data values
-              if (elevation === null || elevation === sampler.noDataValue || isNaN(elevation)) {
-                elevation = 0;
+              // Get pre-computed cumulative deposition up to current frame
+              let cumulativeDeposition = 0;
+              if (hasDeposition && ts.cumulativeDeposition) {
+                cumulativeDeposition = ts.cumulativeDeposition[frameOffset + i];
               }
+              const depositionHeight =
+                (cumulativeDeposition / particlesPerCell) * referenceHeight;
 
-              // Encode as 16-bit in R+G channels (same format as weBIGeo expects)
-              // Scale: elevation * 8 gives ~0.125m precision for 16-bit range
-              const encoded = Math.floor(Math.max(0, elevation) * 8);
-              const idx = (y * width + x) * 4;
-              data[idx + 0] = (encoded >> 8) & 0xFF; // R: high byte
-              data[idx + 1] = encoded & 0xFF;        // G: low byte
-              data[idx + 2] = 0;
-              data[idx + 3] = 255;
+              // Total snow = flow + cumulative deposition
+              const totalSnow = flowHeight + depositionHeight;
+
+              // Apply color mapping (yellow -> orange -> red for flow, blue tint for deposition)
+              const idx = i * 4;
+              if (totalSnow > 0) {
+                const t = Math.min(
+                  (totalSnow - minVal) / (maxVal - minVal),
+                  1.0
+                );
+
+                // Blend ratio: how much of total is deposition vs flow
+                const depositionRatio =
+                  totalSnow > 0 ? depositionHeight / totalSnow : 0;
+
+                // Flow colors: Yellow (255,255,0) -> Orange (255,136,0) -> Red (255,0,0)
+                // Deposition color: Light blue (100,150,255) for settled snow
+                let r, g, b;
+
+                if (depositionRatio > 0.8) {
+                  // Mostly deposition: use blue-white gradient for settled snow
+                  const s = Math.min(t * 2, 1.0);
+                  r = Math.round(200 + 55 * (1 - s)); // 255 -> 200
+                  g = Math.round(220 + 35 * (1 - s)); // 255 -> 220
+                  b = 255; // Stay blue-ish
+                } else if (flowHeight > 0) {
+                  // Active flow present: use warm colors
+                  if (t < 0.5) {
+                    const s = t * 2;
+                    r = 255;
+                    g = Math.round(255 - (255 - 136) * s);
+                    b = Math.round(255 * (1 - s));
+                  } else {
+                    const s = (t - 0.5) * 2;
+                    r = 255;
+                    g = Math.round(136 * (1 - s));
+                    b = 0;
+                  }
+                  // Blend in some blue based on deposition ratio
+                  if (depositionRatio > 0) {
+                    r = Math.round(
+                      r * (1 - depositionRatio * 0.3) +
+                        180 * depositionRatio * 0.3
+                    );
+                    g = Math.round(
+                      g * (1 - depositionRatio * 0.3) +
+                        200 * depositionRatio * 0.3
+                    );
+                    b = Math.round(b + (255 - b) * depositionRatio * 0.5);
+                  }
+                } else {
+                  // Only deposition (no current flow): settled snow (white-blue)
+                  const s = Math.min(t * 2, 1.0);
+                  r = Math.round(220 + 35 * (1 - s));
+                  g = Math.round(235 + 20 * (1 - s));
+                  b = 255;
+                }
+
+                imageData.data[idx + 0] = r;
+                imageData.data[idx + 1] = g;
+                imageData.data[idx + 2] = b;
+                imageData.data[idx + 3] = 255;
+              } else {
+                // Transparent for no snow
+                imageData.data[idx + 0] = 0;
+                imageData.data[idx + 1] = 0;
+                imageData.data[idx + 2] = 0;
+                imageData.data[idx + 3] = 0;
+              }
             }
           }
 
-          console.log(`[ElevationSampler] Sampled ${width * height} elevation points`);
+          ctx.putImageData(imageData, 0, 0);
+          addCanvasToScene(canvas, currentResult.extent);
+        }
+
+        // Helper functions
+        function setStatus(type, text) {
+          statusEl.className = "status " + type;
+          statusEl.textContent = text;
+        }
+
+        function enableControls(enabled) {
+          btnDrawArea.disabled = !enabled;
+          btnDrawRelease.disabled = !enabled;
+          btnClear.disabled = !enabled;
+          btnRun.disabled = !enabled;
+        }
+
+        function showLoading(show, text = "Running simulation...") {
+          if (show) {
+            loadingOverlay.classList.remove("hidden");
+            loadingOverlay.querySelector(".loading-text").textContent = text;
+          } else {
+            loadingOverlay.classList.add("hidden");
+          }
+        }
+
+        // Run simulation
+        async function runSimulation() {
+          // Validate inputs
+          const areaGraphics = areaLayer.graphics.toArray();
+          const releaseGraphics = releaseLayer.graphics.toArray();
+
+          if (areaGraphics.length === 0) {
+            alert("Please draw a calculation area first.");
+            return;
+          }
+
+          if (releaseGraphics.length === 0) {
+            alert("Please draw at least one release area.");
+            return;
+          }
+
+          showLoading(true);
+          enableControls(false);
+          setStatus("loading", "Simulating...");
+
+          try {
+            // Use the calculation area extent (first area polygon)
+            const calculationArea = areaGraphics[0].geometry;
+            let extent = calculationArea.extent.clone();
+
+            // Project to Web Mercator
+            const webMercatorExtent = projection.project(extent, {
+              wkid: 3857,
+            });
+
+            // Get settings
+            const settings = {
+              numParticlesPerReleaseCell: parseInt(
+                document.getElementById("particles").value
+              ),
+              numSimulationSteps: parseInt(
+                document.getElementById("steps").value
+              ),
+              maxRandomDeviation: parseFloat(
+                document.getElementById("deviation").value
+              ),
+              maxRunoutAngle: parseFloat(
+                document.getElementById("runout").value
+              ),
+              persistence: parseFloat(
+                document.getElementById("persistence").value
+              ),
+            };
+
+            // Add time-series settings if enabled
+            if (timeseriesEnabledCheckbox.checked) {
+              settings.timeSeries = {
+                enabled: true,
+                maxFrames: parseInt(
+                  document.getElementById("timeseries-max-frames").value
+                ),
+                timeInterval: parseFloat(
+                  document.getElementById("timeseries-interval").value
+                ),
+                referenceHeight: parseFloat(
+                  document.getElementById("timeseries-ref-height").value
+                ),
+              };
+              console.log("[ArcGIS] Time-series enabled:", settings.timeSeries);
+            }
+
+            const resolution = parseFloat(
+              document.getElementById("resolution").value
+            );
+
+            // Calculate dimensions
+            const width = Math.ceil(
+              (webMercatorExtent.xmax - webMercatorExtent.xmin) / resolution
+            );
+            const height = Math.ceil(
+              (webMercatorExtent.ymax - webMercatorExtent.ymin) / resolution
+            );
+
+            console.log(
+              `Simulation area: ${width}x${height} pixels at ${resolution}m resolution`
+            );
+
+            // Fetch heightmap (demo: generate fake data)
+            showLoading(true, "Fetching elevation data...");
+            const heightmap = await fetchHeightmap(
+              webMercatorExtent,
+              width,
+              height
+            );
+
+            // Create release cells mask from release polygons only
+            showLoading(true, "Creating release cells...");
+            const releaseCells = createReleaseCellsMask(
+              releaseGraphics,
+              webMercatorExtent,
+              width,
+              height
+            );
+
+            // Run simulation
+            showLoading(true, "Running GPU simulation...");
+
+            // Apply color map bounds for all layers before running
+            for (const [layerName, bounds] of Object.entries(
+              colorMapSettings
+            )) {
+              webigeoModule._setColorMapBounds(
+                simulator.$$.ptr,
+                layerName,
+                bounds.min,
+                bounds.max
+              );
+            }
+
+            const input = {
+              aabb: {
+                minX: webMercatorExtent.xmin,
+                minY: webMercatorExtent.ymin,
+                maxX: webMercatorExtent.xmax,
+                maxY: webMercatorExtent.ymax,
+              },
+              heightmap: heightmap,
+              releaseCells: releaseCells,
+            };
+
+            currentResult = await simulator.run(input, settings);
+            console.log("[ArcGIS] Simulation result:", currentResult);
+            console.log("[ArcGIS] Has imageData:", !!currentResult.imageData);
+            console.log(
+              "[ArcGIS] imageData length:",
+              currentResult.imageData ? currentResult.imageData.length : 0
+            );
+            console.log(
+              "[ArcGIS] width:",
+              currentResult.width,
+              "height:",
+              currentResult.height
+            );
+            console.log("[ArcGIS] Has timeSeries:", !!currentResult.timeSeries);
+            if (currentResult.timeSeries) {
+              console.log(
+                "[ArcGIS] timeSeries enabled:",
+                currentResult.timeSeries.enabled
+              );
+              console.log(
+                "[ArcGIS] timeSeries data length:",
+                currentResult.timeSeries.data?.length
+              );
+            }
+
+            currentResult.extent = webMercatorExtent;
+            currentResult.settings = settings; // Store settings for reference
+
+            // Display results
+            displayResults(currentResult);
+            updateVisualization();
+
+            setStatus("ready", "Complete");
+          } catch (error) {
+            console.error("Simulation failed:", error);
+            setStatus("error", "Error: " + error.message);
+            alert("Simulation failed: " + error.message);
+          } finally {
+            showLoading(false);
+            enableControls(true);
+          }
+        }
+
+        // Fetch heightmap from elevation service using ElevationSampler
+        async function fetchHeightmap(extent, width, height) {
+          const data = new Uint8Array(width * height * 4);
+          const cellWidth = (extent.xmax - extent.xmin) / width;
+          const cellHeight = (extent.ymax - extent.ymin) / height;
+
+          try {
+            // Create an ElevationSampler for the extent
+            // The ground must be loaded first
+            await map.ground.load();
+
+            // Create sampler with the requested extent
+            // The sampler caches elevation data for synchronous querying
+            const sampler = await map.ground.createElevationSampler(extent, {
+              demResolution: "finest-contiguous", // Get best available resolution
+            });
+
+            console.log(`[ElevationSampler] Created sampler for extent`);
+            console.log(
+              `[ElevationSampler] DEM resolution: min=${sampler.demResolution?.min}, max=${sampler.demResolution?.max}`
+            );
+            console.log(
+              `[ElevationSampler] Spatial reference: ${sampler.spatialReference?.wkid}`
+            );
+
+            // Sample elevation for each cell
+            // Use elevationAt() for performance when querying many points
+            for (let y = 0; y < height; y++) {
+              for (let x = 0; x < width; x++) {
+                // Calculate center of each cell
+                const px = extent.xmin + (x + 0.5) * cellWidth;
+                const py = extent.ymax - (y + 0.5) * cellHeight; // Y flipped (top to bottom)
+
+                // Get elevation using elevationAt (synchronous, fast)
+                let elevation = sampler.elevationAt(px, py);
+
+                // Handle no-data values
+                if (
+                  elevation === null ||
+                  elevation === sampler.noDataValue ||
+                  isNaN(elevation)
+                ) {
+                  elevation = 0;
+                }
+
+                // Encode as 16-bit in R+G channels (same format as weBIGeo expects)
+                // Scale: elevation * 8 gives ~0.125m precision for 16-bit range
+                const encoded = Math.floor(Math.max(0, elevation) * 8);
+                const idx = (y * width + x) * 4;
+                data[idx + 0] = (encoded >> 8) & 0xff; // R: high byte
+                data[idx + 1] = encoded & 0xff; // G: low byte
+                data[idx + 2] = 0;
+                data[idx + 3] = 255;
+              }
+            }
+
+            console.log(
+              `[ElevationSampler] Sampled ${width * height} elevation points`
+            );
+
+            return { width, height, data };
+          } catch (error) {
+            console.error(
+              "[ElevationSampler] Failed to create sampler:",
+              error
+            );
+            throw new Error(`Failed to fetch elevation data: ${error.message}`);
+          }
+        }
+
+        // Create release cells mask from release area polygons
+        function createReleaseCellsMask(graphics, extent, width, height) {
+          const data = new Uint8Array(width * height * 4);
+          const cellWidth = (extent.xmax - extent.xmin) / width;
+          const cellHeight = (extent.ymax - extent.ymin) / height;
+
+          for (const graphic of graphics) {
+            const polygon = graphic.geometry;
+            const projectedPolygon = projection.project(polygon, {
+              wkid: 3857,
+            });
+
+            for (let y = 0; y < height; y++) {
+              for (let x = 0; x < width; x++) {
+                const px = extent.xmin + (x + 0.5) * cellWidth;
+                const py = extent.ymax - (y + 0.5) * cellHeight;
+
+                const point = new Point({
+                  x: px,
+                  y: py,
+                  spatialReference: { wkid: 3857 },
+                });
+
+                if (projectedPolygon.contains(point)) {
+                  const idx = (y * width + x) * 4;
+                  data[idx + 0] = 255; // R
+                  data[idx + 1] = 0; // G
+                  data[idx + 2] = 0; // B
+                  data[idx + 3] = 255; // A (marks as release cell)
+                }
+              }
+            }
+          }
 
           return { width, height, data };
-
-        } catch (error) {
-          console.error('[ElevationSampler] Failed to create sampler:', error);
-          throw new Error(`Failed to fetch elevation data: ${error.message}`);
         }
-      }
 
-      // Create release cells mask from release area polygons
-      function createReleaseCellsMask(graphics, extent, width, height) {
-        const data = new Uint8Array(width * height * 4);
-        const cellWidth = (extent.xmax - extent.xmin) / width;
-        const cellHeight = (extent.ymax - extent.ymin) / height;
+        // Display results summary
+        function displayResults(result) {
+          // Set up time-series controls if data is available
+          if (
+            result.timeSeries &&
+            result.timeSeries.enabled &&
+            result.timeSeries.data
+          ) {
+            const ts = result.timeSeries;
+            // Find actual number of frames with data
+            let actualFrames = ts.maxFrames;
+            // Could scan data to find last non-zero frame, but use maxFrames for now
 
-        for (const graphic of graphics) {
-          const polygon = graphic.geometry;
-          const projectedPolygon = projection.project(polygon, { wkid: 3857 });
+            frameSlider.max = actualFrames - 1;
+            frameSlider.value = 0;
+            totalFramesEl.textContent = actualFrames;
+            currentFrameEl.textContent = 0;
+            currentTimeEl.textContent = "0.0";
 
-          for (let y = 0; y < height; y++) {
-            for (let x = 0; x < width; x++) {
-              const px = extent.xmin + (x + 0.5) * cellWidth;
-              const py = extent.ymax - (y + 0.5) * cellHeight;
+            // Pre-compute cumulative deposition for each frame if deposition data is available
+            // This avoids recalculating cumulative sums for every pixel on every frame
+            console.log(
+              "[UI] Time-series deposition data:",
+              ts.depositionData ? ts.depositionData.length : "undefined"
+            );
+            if (ts.depositionData && ts.depositionData.length > 0) {
+              const frameSize = ts.width * ts.height;
+              const numFrames = ts.maxFrames;
+              ts.cumulativeDeposition = new Uint32Array(
+                ts.depositionData.length
+              );
 
-              const point = new Point({
-                x: px,
-                y: py,
-                spatialReference: { wkid: 3857 }
-              });
+              console.log(
+                "[JS] Pre-computing cumulative deposition for",
+                numFrames,
+                "frames"
+              );
 
-              if (projectedPolygon.contains(point)) {
-                const idx = (y * width + x) * 4;
-                data[idx + 0] = 255; // R
-                data[idx + 1] = 0;   // G
-                data[idx + 2] = 0;   // B
-                data[idx + 3] = 255; // A (marks as release cell)
+              // For each cell, compute running sum across frames
+              for (let i = 0; i < frameSize; i++) {
+                let cumulative = 0;
+                for (let f = 0; f < numFrames; f++) {
+                  cumulative += ts.depositionData[f * frameSize + i];
+                  ts.cumulativeDeposition[f * frameSize + i] = cumulative;
+                }
               }
+              console.log("[JS] Cumulative deposition pre-computed");
             }
-          }
-        }
 
-        return { width, height, data };
-      }
+            // Show player, hide no-data message
+            timeseriesNoDataDiv.style.display = "none";
+            timeseriesPlayerDiv.style.display = "block";
 
-      // Display results summary
-      function displayResults(result) {
-        // Set up time-series controls if data is available
-        if (result.timeSeries && result.timeSeries.enabled && result.timeSeries.data) {
-          const ts = result.timeSeries;
-          // Find actual number of frames with data
-          let actualFrames = ts.maxFrames;
-          // Could scan data to find last non-zero frame, but use maxFrames for now
-
-          frameSlider.max = actualFrames - 1;
-          frameSlider.value = 0;
-          totalFramesEl.textContent = actualFrames;
-          currentFrameEl.textContent = 0;
-          currentTimeEl.textContent = '0.0';
-
-          // Pre-compute cumulative deposition for each frame if deposition data is available
-          // This avoids recalculating cumulative sums for every pixel on every frame
-          console.log('[UI] Time-series deposition data:', ts.depositionData ? ts.depositionData.length : 'undefined');
-          if (ts.depositionData && ts.depositionData.length > 0) {
-            const frameSize = ts.width * ts.height;
-            const numFrames = ts.maxFrames;
-            ts.cumulativeDeposition = new Uint32Array(ts.depositionData.length);
-
-            console.log('[JS] Pre-computing cumulative deposition for', numFrames, 'frames');
-
-            // For each cell, compute running sum across frames
-            for (let i = 0; i < frameSize; i++) {
-              let cumulative = 0;
-              for (let f = 0; f < numFrames; f++) {
-                cumulative += ts.depositionData[f * frameSize + i];
-                ts.cumulativeDeposition[f * frameSize + i] = cumulative;
-              }
+            // Show time-series controls if timeseries layer is selected
+            if (layerSelect.value === "timeseries") {
+              timeseriesControlsDiv.style.display = "block";
             }
-            console.log('[JS] Cumulative deposition pre-computed');
+          } else {
+            // Show no-data message, hide player
+            timeseriesNoDataDiv.style.display =
+              layerSelect.value === "timeseries" ? "block" : "none";
+            timeseriesPlayerDiv.style.display = "none";
           }
 
-          // Show player, hide no-data message
-          timeseriesNoDataDiv.style.display = 'none';
-          timeseriesPlayerDiv.style.display = 'block';
-
-          // Show time-series controls if timeseries layer is selected
-          if (layerSelect.value === 'timeseries') {
-            timeseriesControlsDiv.style.display = 'block';
-          }
-        } else {
-          // Show no-data message, hide player
-          timeseriesNoDataDiv.style.display = layerSelect.value === 'timeseries' ? 'block' : 'none';
-          timeseriesPlayerDiv.style.display = 'none';
-        }
-
-        // Handle result with imageData (color-mapped texture readback)
-        if (result.success && result.imageData) {
-          let timeseriesInfo = '';
-          if (result.timeSeries && result.timeSeries.enabled) {
-            timeseriesInfo = `
+          // Handle result with imageData (color-mapped texture readback)
+          if (result.success && result.imageData) {
+            let timeseriesInfo = "";
+            if (result.timeSeries && result.timeSeries.enabled) {
+              timeseriesInfo = `
             <div class="result-item">
               <span class="result-label">Time-Series</span>
-              <span class="result-value">${result.timeSeries.data ? 'Available' : 'No data'}</span>
+              <span class="result-value">${
+                result.timeSeries.data ? "Available" : "No data"
+              }</span>
             </div>
             <div class="result-item">
               <span class="result-label">Time Frames</span>
-              <span class="result-value">${result.timeSeries.maxFrames} @ ${result.timeSeries.timeInterval}s interval</span>
+              <span class="result-value">${result.timeSeries.maxFrames} @ ${
+                result.timeSeries.timeInterval
+              }s interval</span>
             </div>
             `;
-          }
-          resultsContent.innerHTML = `
+            }
+            resultsContent.innerHTML = `
             <div class="result-item">
               <span class="result-label">Status</span>
               <span class="result-value" style="color: #27ae60;">Completed</span>
@@ -1379,39 +1697,45 @@
             </div>
             ${timeseriesInfo}
           `;
-          return;
-        }
+            return;
+          }
 
-        // Handle simplified result (success only, no data)
-        if (result.success && !result.zdelta && !result.imageData) {
-          resultsContent.innerHTML = `
+          // Handle simplified result (success only, no data)
+          if (result.success && !result.zdelta && !result.imageData) {
+            resultsContent.innerHTML = `
             <div class="result-item">
               <span class="result-label">Status</span>
               <span class="result-value" style="color: #27ae60;">Completed</span>
             </div>
             <div class="result-item">
               <span class="result-label">Message</span>
-              <span class="result-value">${result.message || 'Simulation ran successfully'}</span>
+              <span class="result-value">${
+                result.message || "Simulation ran successfully"
+              }</span>
             </div>
             <p style="margin-top: 12px; font-size: 0.8em; color: #6c757d;">
               Note: Result data readback is not yet implemented.
               The GPU simulation completed successfully.
             </p>
           `;
-          return;
-        }
+            return;
+          }
 
-        // Full result with data arrays
-        let maxZdelta = 0, maxCounts = 0, maxLength = 0;
-        for (let i = 0; i < result.zdelta.length; i++) {
-          if (result.zdelta[i] > maxZdelta) maxZdelta = result.zdelta[i];
-          if (result.cellCounts[i] > maxCounts) maxCounts = result.cellCounts[i];
-          if (result.travelLength[i] > maxLength) maxLength = result.travelLength[i];
-        }
+          // Full result with data arrays
+          let maxZdelta = 0,
+            maxCounts = 0,
+            maxLength = 0;
+          for (let i = 0; i < result.zdelta.length; i++) {
+            if (result.zdelta[i] > maxZdelta) maxZdelta = result.zdelta[i];
+            if (result.cellCounts[i] > maxCounts)
+              maxCounts = result.cellCounts[i];
+            if (result.travelLength[i] > maxLength)
+              maxLength = result.travelLength[i];
+          }
 
-        const maxVelocity = Math.sqrt(2 * 9.81 * maxZdelta);
+          const maxVelocity = Math.sqrt(2 * 9.81 * maxZdelta);
 
-        resultsContent.innerHTML = `
+          resultsContent.innerHTML = `
           <div class="result-item">
             <span class="result-label">Dimensions</span>
             <span class="result-value">${result.width} x ${result.height}</span>
@@ -1432,154 +1756,187 @@
             <span class="result-label">Max Cell Count</span>
             <span class="result-value">${maxCounts.toFixed(0)}</span>
           </div>
-          ${result.timings ? `
+          ${
+            result.timings
+              ? `
           <h4 style="margin-top: 12px; font-size: 0.85em; color: #495057;">Timings</h4>
           <div class="timings-list">
-            ${Object.entries(result.timings).map(([k, v]) => `
+            ${Object.entries(result.timings)
+              .map(
+                ([k, v]) => `
               <div class="timing-item">
                 <span>${k}</span>
                 <span>${v.toFixed(1)} ms</span>
               </div>
-            `).join('')}
+            `
+              )
+              .join("")}
           </div>
-          ` : ''}
-        `;
-      }
-
-      // Update visualization on 3D scene
-      function updateVisualization() {
-        console.log('[ArcGIS] updateVisualization called');
-        if (!currentResult) {
-          console.log('[ArcGIS] No currentResult');
-          return;
-        }
-
-        console.log('[ArcGIS] currentResult:', currentResult);
-        console.log('[ArcGIS] layers present:', !!currentResult.layers);
-
-        // Get selected layer type
-        const layerType = layerSelect.value;
-        console.log('[ArcGIS] Selected layer:', layerType);
-
-        // Handle time-series layer
-        if (layerType === 'timeseries') {
-          timeseriesControlsDiv.style.display = 'block';
-          if (currentResult.timeSeries && currentResult.timeSeries.data) {
-            timeseriesNoDataDiv.style.display = 'none';
-            timeseriesPlayerDiv.style.display = 'block';
-            renderTimeseriesFrame(parseInt(frameSlider.value));
-          } else {
-            console.warn('[ArcGIS] Time-series selected but no data available');
-            timeseriesNoDataDiv.style.display = 'block';
-            timeseriesPlayerDiv.style.display = 'none';
+          `
+              : ""
           }
-          return;
+        `;
         }
 
-        // Hide time-series controls for other layers
-        timeseriesControlsDiv.style.display = 'none';
-        stopAnimation();
-
-        // Handle layers from multi-layer texture readback
-        if (currentResult.layers && currentResult.width && currentResult.height) {
-          // Map layer select values to layer names
-          const layerNameMap = {
-            'zdelta': 'zdelta',
-            'cellCounts': 'cellCounts',
-            'travelLength': 'travelLength',
-            'travelAngle': 'travelAngle',
-            'heightDifference': 'heightDifference'
-          };
-
-          const layerName = layerNameMap[layerType] || 'zdelta';
-          const layerData = currentResult.layers[layerName];
-
-          if (!layerData) {
-            console.warn('[ArcGIS] No data for layer:', layerName);
+        // Update visualization on 3D scene
+        function updateVisualization() {
+          console.log("[ArcGIS] updateVisualization called");
+          if (!currentResult) {
+            console.log("[ArcGIS] No currentResult");
             return;
           }
 
-          console.log('[ArcGIS] Using layer:', layerName, 'with', layerData.length, 'bytes');
+          console.log("[ArcGIS] currentResult:", currentResult);
+          console.log("[ArcGIS] layers present:", !!currentResult.layers);
 
-          // Create canvas from layer imageData
-          const canvas = document.createElement('canvas');
-          canvas.width = currentResult.width;
-          canvas.height = currentResult.height;
-          const ctx = canvas.getContext('2d');
-          const imageData = ctx.createImageData(canvas.width, canvas.height);
+          // Get selected layer type
+          const layerType = layerSelect.value;
+          console.log("[ArcGIS] Selected layer:", layerType);
 
-          // Copy the RGBA data from the readback
-          for (let i = 0; i < layerData.length; i++) {
-            imageData.data[i] = layerData[i];
+          // Handle time-series layer
+          if (layerType === "timeseries") {
+            timeseriesControlsDiv.style.display = "block";
+            if (currentResult.timeSeries && currentResult.timeSeries.data) {
+              timeseriesNoDataDiv.style.display = "none";
+              timeseriesPlayerDiv.style.display = "block";
+              renderTimeseriesFrame(parseInt(frameSlider.value));
+            } else {
+              console.warn(
+                "[ArcGIS] Time-series selected but no data available"
+              );
+              timeseriesNoDataDiv.style.display = "block";
+              timeseriesPlayerDiv.style.display = "none";
+            }
+            return;
           }
 
-          ctx.putImageData(imageData, 0, 0);
+          // Hide time-series controls for other layers
+          timeseriesControlsDiv.style.display = "none";
+          stopAnimation();
 
-          // Add to 3D scene
-          addCanvasToScene(canvas, currentResult.extent);
-          return;
-        }
+          // Handle layers from multi-layer texture readback
+          if (
+            currentResult.layers &&
+            currentResult.width &&
+            currentResult.height
+          ) {
+            // Map layer select values to layer names
+            const layerNameMap = {
+              zdelta: "zdelta",
+              cellCounts: "cellCounts",
+              travelLength: "travelLength",
+              travelAngle: "travelAngle",
+              heightDifference: "heightDifference",
+            };
 
-        // Fallback: Handle single imageData (backwards compatibility)
-        if (currentResult.imageData && currentResult.width && currentResult.height) {
-          console.log('[ArcGIS] Using single imageData for visualization (fallback)');
-          const canvas = document.createElement('canvas');
-          canvas.width = currentResult.width;
-          canvas.height = currentResult.height;
-          const ctx = canvas.getContext('2d');
-          const imageData = ctx.createImageData(canvas.width, canvas.height);
+            const layerName = layerNameMap[layerType] || "zdelta";
+            const layerData = currentResult.layers[layerName];
 
-          for (let i = 0; i < currentResult.imageData.length; i++) {
-            imageData.data[i] = currentResult.imageData[i];
+            if (!layerData) {
+              console.warn("[ArcGIS] No data for layer:", layerName);
+              return;
+            }
+
+            console.log(
+              "[ArcGIS] Using layer:",
+              layerName,
+              "with",
+              layerData.length,
+              "bytes"
+            );
+
+            // Create canvas from layer imageData
+            const canvas = document.createElement("canvas");
+            canvas.width = currentResult.width;
+            canvas.height = currentResult.height;
+            const ctx = canvas.getContext("2d");
+            const imageData = ctx.createImageData(canvas.width, canvas.height);
+
+            // Copy the RGBA data from the readback
+            for (let i = 0; i < layerData.length; i++) {
+              imageData.data[i] = layerData[i];
+            }
+
+            ctx.putImageData(imageData, 0, 0);
+
+            // Add to 3D scene
+            addCanvasToScene(canvas, currentResult.extent);
+            return;
           }
 
-          ctx.putImageData(imageData, 0, 0);
-          addCanvasToScene(canvas, currentResult.extent);
-          return;
-        }
+          // Fallback: Handle single imageData (backwards compatibility)
+          if (
+            currentResult.imageData &&
+            currentResult.width &&
+            currentResult.height
+          ) {
+            console.log(
+              "[ArcGIS] Using single imageData for visualization (fallback)"
+            );
+            const canvas = document.createElement("canvas");
+            canvas.width = currentResult.width;
+            canvas.height = currentResult.height;
+            const ctx = canvas.getContext("2d");
+            const imageData = ctx.createImageData(canvas.width, canvas.height);
 
-        console.log('[ArcGIS] No layer data available');
-      }
+            for (let i = 0; i < currentResult.imageData.length; i++) {
+              imageData.data[i] = currentResult.imageData[i];
+            }
 
-      // Add a canvas as a draped layer on the 3D terrain
-      function addCanvasToScene(canvas, extent) {
-        // Remove old layer
-        if (mediaLayer) {
-          map.remove(mediaLayer);
-        }
-
-        const elevationOffset = parseFloat(elevationOffsetInput.value) || 5;
-
-        // Create new media layer from canvas with elevation info for 3D
-        const imageElement = new ImageElement({
-          image: canvas.toDataURL('image/png'),
-          georeference: new ExtentAndRotationGeoreference({
-            extent: new Extent({
-              xmin: extent.xmin,
-              ymin: extent.ymin,
-              xmax: extent.xmax,
-              ymax: extent.ymax,
-              spatialReference: { wkid: 3857 }
-            })
-          })
-        });
-
-        mediaLayer = new MediaLayer({
-          source: [imageElement],
-          title: 'Avalanche Simulation',
-          opacity: opacitySlider.value / 100,
-          // Drape on the terrain surface with a small offset
-          elevationInfo: {
-            mode: 'relative-to-ground',
-            offset: elevationOffset
+            ctx.putImageData(imageData, 0, 0);
+            addCanvasToScene(canvas, currentResult.extent);
+            return;
           }
-        });
 
-        map.add(mediaLayer);
+          console.log("[ArcGIS] No layer data available");
+        }
 
-        console.log('[ArcGIS] Added simulation result to 3D scene');
-      }
-    });
-  </script>
-</body>
+        // Add a canvas as a draped layer on the 3D terrain
+        function addCanvasToScene(canvas, extent) {
+          // Remove old layer
+          if (mediaLayer) {
+            map.remove(mediaLayer);
+          }
+
+          const elevationOffset = parseFloat(elevationOffsetInput.value) || 5;
+
+          // Create new media layer from canvas with elevation info for 3D
+          const imageElement = new ImageElement({
+            image: canvas.toDataURL("image/png"),
+            georeference: new ExtentAndRotationGeoreference({
+              extent: new Extent({
+                xmin: extent.xmin,
+                ymin: extent.ymin,
+                xmax: extent.xmax,
+                ymax: extent.ymax,
+                spatialReference: { wkid: 3857 },
+              }),
+            }),
+          });
+
+          mediaLayer = new MediaLayer({
+            source: [imageElement],
+            title: "Avalanche Simulation",
+            opacity: opacitySlider.value / 100,
+            // Drape on the terrain surface with a small offset
+            elevationInfo: {
+              mode: "relative-to-ground",
+              offset: elevationOffset,
+            },
+          });
+
+          map.add(mediaLayer);
+
+          console.log("[ArcGIS] Added simulation result to 3D scene");
+        }
+      });
+    </script>
+
+    <!-- Quote Banner -->
+    <div class="quote-banner">
+      <span class="quote-icon">"</span>
+      <div class="quote-text">"All models are wrong, but some are useful."</div>
+      <div class="quote-author">— George E. P. Box</div>
+    </div>
+  </body>
 </html>
